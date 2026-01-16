@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,11 +141,9 @@ func (c *CustomRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return resp, nil
 }
 
-// Helper for simple API: create a transport that injects GitHub headers and acquires token automatically
-// Accepts a context with app credentials or PAT token, logger, and installation target type.
-// This is what is used in the application code.
-func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, orgInfo ...string) *CustomRoundTripper {
-
+// newGithubStyleTransportWithAuth creates a transport that injects GitHub headers and acquires token automatically.
+// Internal helper that accepts explicit auth config.
+func newGithubStyleTransportWithAuth(ctx context.Context, authConfig *auth.AuthConfig, logger *slog.Logger, targetInfo ...string) *CustomRoundTripper {
 	static := map[string]string{
 		"Accept":               "application/vnd.github+json",
 		"X-GitHub-Api-Version": "2022-11-28",
@@ -152,24 +151,25 @@ func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, orgInfo .
 
 	authProv := func(req *http.Request) (string, error) {
 		// Check if using PAT token
-		if token := auth.Auth.Token; token != "" {
+		if token := authConfig.Token; token != "" {
 			return "Bearer " + token, nil
 		}
 
 		// Using GitHub App authentication
-		// Build cache key based on target type and organization
-
 		targetType := ""
 		orgName := ""
 
-		if len(orgInfo) > 0 {
-			targetType = orgInfo[0]
+		if len(targetInfo) > 0 {
+			targetType = targetInfo[0]
 		}
-		if len(orgInfo) > 1 {
-			orgName = orgInfo[1]
+		if len(targetInfo) > 1 {
+			orgName = targetInfo[1]
 		}
 
 		cacheKey := targetType
+		if orgName != "" {
+			cacheKey = targetType + ":" + orgName
+		}
 
 		globalTokenCache.RLock()
 		if cached, ok := globalTokenCache.tokens[cacheKey]; ok && time.Now().Before(cached.expires) {
@@ -182,15 +182,15 @@ func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, orgInfo .
 		globalTokenCache.Lock()
 		defer globalTokenCache.Unlock()
 
-		// Double-check after acquiring write lock to deal with race condition
+		// Double-check after acquiring write lock
 		if cached, ok := globalTokenCache.tokens[cacheKey]; ok && time.Now().Before(cached.expires) {
 			return "Bearer " + cached.token, nil
 		}
 
 		ts := auth.NewTokenService(
-			auth.Auth.AppID,
-			auth.Auth.PrivateKey,
-			auth.Auth.BaseURL,
+			authConfig.AppID,
+			authConfig.PrivateKey,
+			authConfig.BaseURL,
 		)
 
 		var tokenStr string
@@ -232,4 +232,35 @@ func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, orgInfo .
 		AuthProvider:  authProv,
 		Logger:        logger,
 	})
+}
+
+// NewGithubStyleTransport creates a transport using the global auth.Auth configuration.
+// Deprecated: Use GetAuthenticatedTransport with explicit auth config instead.
+func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, targetInfo ...string) *CustomRoundTripper {
+	return newGithubStyleTransportWithAuth(ctx, auth.Auth, logger, targetInfo...)
+}
+
+// GetAuthenticatedTransport returns the appropriate GitHub transport based on auth configuration.
+// For GitHub App authentication, you can optionally provide a repository string (owner/repo format)
+// to extract the organization name. This is the recommended API for creating authenticated transports.
+func GetAuthenticatedTransport(ctx context.Context, authConfig *auth.AuthConfig, logger *slog.Logger, repo ...string) *CustomRoundTripper {
+	// Check if using PAT authentication
+	if authConfig.Token != "" {
+		return newGithubStyleTransportWithAuth(ctx, authConfig, logger)
+	}
+
+	// Using GitHub App authentication
+	if authConfig.AppID != "" && authConfig.PrivateKey != "" {
+		// If a repository string is provided (owner/repo format), extract the owner as org name
+		if len(repo) > 0 && repo[0] != "" && strings.Contains(repo[0], "/") {
+			parts := strings.Split(repo[0], "/")
+			orgName := parts[0]
+			return newGithubStyleTransportWithAuth(ctx, authConfig, logger, models.OrganizationType, orgName)
+		}
+		// Fall back to generic organization type without specific org name
+		return newGithubStyleTransportWithAuth(ctx, authConfig, logger, models.OrganizationType)
+	}
+
+	// Default fallback (no auth)
+	return newGithubStyleTransportWithAuth(ctx, authConfig, logger)
 }

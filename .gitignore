@@ -60,6 +60,7 @@ go.work
 examples/
 logs
 analyses
+reports
 
 
 # End of https://www.toptal.com/developers/gitignore/api/git,go,visualstudiocode
