@@ -41,11 +41,9 @@ go.work
 
 ### VisualStudioCode ###
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/*.code-snippets
+
+### GOLAND ###
+.idea/*
 
 # Local History for Visual Studio Code
 .history/
@@ -57,5 +55,11 @@ go.work
 # Ignore all local history of files
 .history
 .ionide
+
+# Local testing and examples
+examples/
+logs
+analyses
+
 
 # End of https://www.toptal.com/developers/gitignore/api/git,go,visualstudiocode

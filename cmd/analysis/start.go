@@ -1,8 +1,6 @@
 package analysis
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -17,8 +15,25 @@ var AnalysisStartCmd = &cobra.Command{
 
 			This prepares the workspace for storing SARIF results and related
 			analysis artifacts.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Starting analysis...")
-		// TODO: Implement start logic
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		node := cmd
+		if node.HasParent() {
+			node = node.Parent()
+			if node.PersistentPreRunE != nil {
+				if err := node.PersistentPreRunE(cmd, args); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
+
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return analysisService.StartAnalysis(cmd.Context())
+	},
+}
+
+func init() {
+	AnalysisStartCmd.Flags().StringVar(&reposFile, "repos-file", "", "Path to repository list file (TOML or JSON)")
+	AnalysisStartCmd.Flags().StringVar(&repos, "repos", "", "Comma-separated list of repositories (owner/repo)")
 }
