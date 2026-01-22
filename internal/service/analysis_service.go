@@ -35,6 +35,51 @@ func NewAnalysisService(logger *slog.Logger, auth *auth.AuthConfig, analysisId s
 	}
 }
 
+func processRepositoryAnalysis(ctx context.Context, workerId int, repoChan chan string, resultChan chan models.MRVAStatusResponse, outputDir string, analysisId string, controllerRepo string, auth *auth.AuthConfig, logger *slog.Logger) (*models.MRVAStatusResponse, error) {
+	logger.Info("Worker started for MRVA status check", slog.Int("workerId", workerId))
+
+	for repo := range repoChan {
+		select {
+		case <-ctx.Done():
+			logger.Info("Worker exiting due to context cancellation", slog.Int("workerId", workerId))
+			return nil, ctx.Err()
+		default:
+			statusResponse, err := github.FetchMRVAStatus(ctx, repo, analysisId, controllerRepo, auth, logger)
+			if err != nil {
+				logger.Error("Failed to fetch MRVA status",
+					slog.String("repo", repo),
+					slog.Any("error", err))
+				continue
+			}
+
+			if statusResponse.AnalysisStatus == "succeeded" {
+				logger.Info("MRVA analysis succeeded, SARIF artifact is ready for download",
+					"repository", repo)
+				// Download SARIF file
+				sarifPath, err := github.DownloadArtifactFile(ctx, repo, statusResponse.ArtifactURL, outputDir, auth, logger)
+				statusResponse.SarifFilePath = sarifPath
+				if err != nil {
+					logger.Error("Failed to download SARIF file",
+						slog.String("repo", repo),
+						slog.Any("error", err))
+				} else {
+					logger.Info("SARIF file downloaded",
+						"repository", repo,
+						"path", sarifPath)
+				}
+			}
+
+			logger.Info("Successfully retrieved MRVA status",
+				"repository", repo,
+				"analysis_status", statusResponse.AnalysisStatus)
+			resultChan <- *statusResponse
+		}
+		logger.Info("Worker completed MRVA status check", slog.Int("workerId", workerId))
+	}
+
+	return nil, nil
+}
+
 // createAnalysisDirectory creates a directory structure for the analysis
 func (s *AnalysisService) createAnalysisDirectory(ctx context.Context) error {
 	if s.analysisId == "" {
@@ -85,11 +130,12 @@ func (s *AnalysisService) StartAnalysis(ctx context.Context) error {
 	return nil
 }
 
-func (s *AnalysisService) CheckAnalysisStatus(ctx context.Context) error {
+func (s *AnalysisService) DownloadAnalysiFiles(ctx context.Context, outputDir string) error {
+
 	// Calculate optimal number of workers for concurrent status checks
 	workers := util.CalculateOptimalWorkers(len(s.repositories))
 
-	s.logger.Info("starting status check",
+	s.logger.Info("starting sarif files download",
 		"analysis_id", s.analysisId,
 		"controller_repo", s.controllerRepo,
 		"repository_count", len(s.repositories),
@@ -107,7 +153,7 @@ func (s *AnalysisService) CheckAnalysisStatus(ctx context.Context) error {
 		wg.Add(1)
 		go func(workerId int) {
 			defer wg.Done()
-			github.CheckMRVAStatus(ctx, workerId, repoChan, resultsChan, s.analysisId, s.controllerRepo, s.auth, s.logger)
+			processRepositoryAnalysis(ctx, workerId, repoChan, resultsChan, outputDir, s.analysisId, s.controllerRepo, s.auth, s.logger)
 		}(i)
 	}
 
@@ -145,4 +191,30 @@ func (s *AnalysisService) CheckAnalysisStatus(ctx context.Context) error {
 			results = append(results, result)
 		}
 	}
+}
+
+func (s *AnalysisService) GetAnalysisSummary(ctx context.Context) error {
+	s.logger.Info("fetching analysis summary",
+		"analysis_id", s.analysisId,
+		"controller_repo", s.controllerRepo)
+	summary, err := github.FetchMRVASummary(ctx, s.analysisId, s.controllerRepo, s.auth, s.logger)
+	if err != nil {
+		s.logger.Error("failed to fetch analysis summary",
+			"analysis_id", s.analysisId,
+			"controller_repo", s.controllerRepo,
+			"error", err)
+		return fmt.Errorf("failed to fetch analysis summary: %w", err)
+	}
+
+	// Create a report for summary
+	if err := s.generateMRVASummaryReport(summary); err != nil {
+		s.logger.Error("failed to generate summary report", "error", err)
+		return fmt.Errorf("failed to generate summary report: %w", err)
+	}
+
+	s.logger.Info("analysis summary fetched successfully",
+		"analysis_id", s.analysisId,
+		"controller_repo", s.controllerRepo)
+
+	return nil
 }

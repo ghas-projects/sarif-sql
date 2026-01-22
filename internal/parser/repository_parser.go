@@ -31,22 +31,25 @@ func ParseRepositoriesFromFile(filePath string) ([]models.Repository, error) {
 
 // parseToml parses TOML data into repositories
 func parseToml(data []byte) ([]models.Repository, error) {
-	var repoList models.RepositoryList
-	if err := toml.Unmarshal(data, &repoList); err != nil {
+	// TOML structure uses [[repositories]] which creates a map with "repositories" key
+	var wrapper struct {
+		Repositories []models.Repository `toml:"repositories"`
+	}
+	if err := toml.Unmarshal(data, &wrapper); err != nil {
 		return nil, fmt.Errorf("failed to parse TOML: %w", err)
 	}
 
-	return repoList.Repositories, nil
+	return wrapper.Repositories, nil
 }
 
 // parseJson parses JSON data into repositories
 func parseJson(data []byte) ([]models.Repository, error) {
-	var repoList models.RepositoryList
+	var repoList []models.Repository
 	if err := json.Unmarshal(data, &repoList); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	return repoList.Repositories, nil
+	return repoList, nil
 }
 
 // ParseRepositoriesFromString parses comma-separated repository strings (owner/repo)

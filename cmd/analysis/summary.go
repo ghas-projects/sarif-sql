@@ -4,10 +4,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var AnalysisStatusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Check MRVA analysis status",
-	Long: `The status command retrieves and displays the current state of one
+var AnalysisSummaryCmd = &cobra.Command{
+	Use:   "summary",
+	Short: "Check MRVA analysis summary",
+	Long: `The summary command retrieves and displays the current state of one
 			or more MRVA analyses. This allows users to monitor analysis progress
 			and determine when results are ready to be downloaded.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -23,8 +23,6 @@ var AnalysisStatusCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-
-		return analysisService.CheckAnalysisStatus(cmd.Context())
-
+		return analysisService.GetAnalysisSummary(cmd.Context())
 	},
 }

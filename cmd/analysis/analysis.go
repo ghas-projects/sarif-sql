@@ -94,6 +94,6 @@ func init() {
 	AnalysisCmd.PersistentFlags().StringVar(&repos, "repos", "", "Comma-separated list of repositories to analyze in owner/name format")
 
 	AnalysisCmd.AddCommand(AnalysisStartCmd)
-	AnalysisCmd.AddCommand(AnalysisStatusCmd)
+	AnalysisCmd.AddCommand(AnalysisSummaryCmd)
 	AnalysisCmd.AddCommand(AnalysisDownloadCmd)
 }
