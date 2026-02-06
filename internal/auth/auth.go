@@ -74,12 +74,7 @@ func (ts *TokenService) CreateJWT() (string, error) {
 
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		type InstallationTokenInfo struct {
-			Token     string `json:"token"`
-			ExpiresAt string `json:"expires_at"`
-			ClientID  string `json:"client_id"`
-			AppID     string `json:"app_id"`
-		}
+		// Try PKCS8 format
 		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse private key: %w", err)

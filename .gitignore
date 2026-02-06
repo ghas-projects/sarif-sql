@@ -61,6 +61,6 @@ examples/
 logs
 analyses
 reports
-
+avro-output
 
 # End of https://www.toptal.com/developers/gitignore/api/git,go,visualstudiocode

@@ -164,6 +164,15 @@ func contains(slice []string, item string) bool {
 func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryResponse) error {
 	// Build the markdown content
 	var md strings.Builder
+	// Pre-allocate based on estimated size
+	totalScanned := len(summary.ScannedRepositories)
+	totalSkipped := summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount
+	totalNotFound := summary.NotFoundRepositories.RepositoryCount
+	totalNoCodeQL := summary.NoCodeQLDBRepositories.RepositoryCount
+	totalOverLimit := summary.OverLimitRepositories.RepositoryCount
+	totalRepos := totalScanned + totalSkipped + totalNotFound + totalNoCodeQL + totalOverLimit
+	// Estimate: ~400 bytes per repo + 3KB overhead
+	md.Grow(totalRepos*400 + 3072)
 
 	// Header
 	md.WriteString("# MRVA Analysis Summary\n\n")
@@ -178,12 +187,6 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 
 	// Overview Section
 	md.WriteString("## Overview\n\n")
-	totalScanned := len(summary.ScannedRepositories)
-	totalSkipped := summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount
-	totalNotFound := summary.NotFoundRepositories.RepositoryCount
-	totalNoCodeQL := summary.NoCodeQLDBRepositories.RepositoryCount
-	totalOverLimit := summary.OverLimitRepositories.RepositoryCount
-	totalRepos := totalScanned + totalSkipped + totalNotFound + totalNoCodeQL + totalOverLimit
 
 	md.WriteString("| Category | Count |\n")
 	md.WriteString("|----------|-------|\n")

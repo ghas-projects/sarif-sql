@@ -9,17 +9,14 @@ import (
 
 	"github.com/ghas-projects/sarif-avro/cmd/analysis"
 	"github.com/ghas-projects/sarif-avro/cmd/transform"
-	"github.com/ghas-projects/sarif-avro/internal/auth"
 	"github.com/ghas-projects/sarif-avro/internal/models"
 	"github.com/ghas-projects/sarif-avro/util"
 	"github.com/spf13/cobra"
 )
 
 var (
-	appId      string
-	privateKey string
-	token      string
-	baseURL    string
+	analysisId     string
+	controllerRepo string
 )
 
 var rootCmd = &cobra.Command{
@@ -48,46 +45,6 @@ var rootCmd = &cobra.Command{
 
 		models.Logger = logger
 
-		// Validate that either token OR (app-id + private-key) is provided, but not both
-		hasToken := token != ""
-		hasAppCreds := appId != "" || privateKey != ""
-
-		if !hasToken && !hasAppCreds {
-			return fmt.Errorf("authentication required: provide either --token OR both --app-id and --private-key")
-		}
-
-		if hasToken && hasAppCreds {
-			return fmt.Errorf("conflicting authentication methods: provide either --token OR (--app-id and --private-key), not both")
-		}
-
-		// If using app credentials, both app-id and private-key must be provided
-		if hasAppCreds {
-			if appId == "" {
-				return fmt.Errorf("--app-id is required when using GitHub App authentication")
-			}
-			if privateKey == "" {
-				return fmt.Errorf("--private-key is required when using GitHub App authentication")
-			}
-		}
-
-		// Set default base URL if not provided
-		if baseURL == "" {
-			baseURL = models.DefaultBaseURL
-		}
-
-		// Initialize and store authentication config
-		auth.Auth = &auth.AuthConfig{
-			Token:      token,
-			AppID:      appId,
-			PrivateKey: privateKey,
-			BaseURL:    baseURL,
-		}
-
-		logger.Info("authentication configured",
-			"has_token", token != "",
-			"has_app_creds", appId != "",
-			"base_url", baseURL)
-
 		return nil
 
 	},
@@ -103,19 +60,10 @@ func init() {
 	rootCmd.AddCommand(analysis.AnalysisCmd)
 	rootCmd.AddCommand(transform.TransformCmd)
 
-	// GitHub App authentication flags
-	rootCmd.PersistentFlags().StringVar(&appId, "app-id", "", "GitHub App ID (required if not using --token)")
-	rootCmd.PersistentFlags().StringVar(&privateKey, "private-key", "", "GitHub App private key PEM content (required if not using --token)")
-
-	// PAT authentication flag
-	rootCmd.PersistentFlags().StringVar(&token, "token", "", "GitHub Personal Access Token (required if not using GitHub App authentication)")
-
-	// Common flags
-	rootCmd.PersistentFlags().StringVar(&baseURL, "base-url", "", "GitHub API base URL")
-
-	if baseURL == "" {
-		baseURL = models.DefaultBaseURL
-	}
+	rootCmd.PersistentFlags().StringVar(&analysisId, "analysis-id", "", "Analysis ID for the MRVA analysis")
+	rootCmd.MarkPersistentFlagRequired("analysis-id")
+	rootCmd.PersistentFlags().StringVar(&controllerRepo, "controller-repo", "", "Specify the controller repository in owner/name format")
+	rootCmd.MarkPersistentFlagRequired("controller-repo")
 
 }
 

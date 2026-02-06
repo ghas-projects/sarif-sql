@@ -1,0 +1,13 @@
+{
+	"type": "record",
+	"name": "Run",
+	"namespace": "com.sarif.avro",
+	"fields": [
+		{"name": "run_id", "type": "int"},
+		{"name": "tool_name", "type":  "string"},
+		{"name": "tool_version", "type": ["null", "string"], "default": null},
+		{"name": "analysis_id", "type": "string"},
+		{"name": "controller_repo", "type": ["null", "string"], "default": null},
+		{"name": "date", "type": ["null", "string"], "default": null}
+	]
+}

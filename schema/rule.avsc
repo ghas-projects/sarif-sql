@@ -1,0 +1,14 @@
+{
+	"type": "record",
+	"name": "Rule",
+	"namespace": "com.sarif.avro",
+	"fields": [
+		{"name": "rule_id", "type": "int"},
+		{"name": "id", "type": "string"},
+		{"name": "rule_name", "type": "string"},
+		{"name": "rule_description", "type": ["null", "string"], "default": null},
+		{"name": "property_tags", "type": {"type": "array", "items": "string"}},
+		{"name": "kind", "type": "string"},
+		{"name": "severity_level", "type": ["null", "string"], "default": null}
+	]
+}

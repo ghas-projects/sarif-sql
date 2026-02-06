@@ -1,0 +1,10 @@
+{
+	"type": "record",
+	"name": "Repository",
+	"namespace": "com.sarif.avro",
+	"fields": [
+		{"name": "repository_id", "type": "int"},
+		{"name": "repository_name", "type": "string"},
+		{"name": "repository_url", "type":  "string"}
+	]
+}

@@ -143,7 +143,7 @@ func (c *CustomRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 // newGithubStyleTransportWithAuth creates a transport that injects GitHub headers and acquires token automatically.
 // Internal helper that accepts explicit auth config.
-func newGithubStyleTransportWithAuth(ctx context.Context, authConfig *auth.AuthConfig, logger *slog.Logger, targetInfo ...string) *CustomRoundTripper {
+func newGithubStyleTransportWithAuth(authConfig *auth.AuthConfig, logger *slog.Logger, targetInfo ...string) *CustomRoundTripper {
 	static := map[string]string{
 		"Accept":               "application/vnd.github+json",
 		"X-GitHub-Api-Version": "2022-11-28",
@@ -237,7 +237,7 @@ func newGithubStyleTransportWithAuth(ctx context.Context, authConfig *auth.AuthC
 // NewGithubStyleTransport creates a transport using the global auth.Auth configuration.
 // Deprecated: Use GetAuthenticatedTransport with explicit auth config instead.
 func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, targetInfo ...string) *CustomRoundTripper {
-	return newGithubStyleTransportWithAuth(ctx, auth.Auth, logger, targetInfo...)
+	return newGithubStyleTransportWithAuth(auth.Auth, logger, targetInfo...)
 }
 
 // GetAuthenticatedTransport returns the appropriate GitHub transport based on auth configuration.
@@ -246,7 +246,7 @@ func NewGithubStyleTransport(ctx context.Context, logger *slog.Logger, targetInf
 func GetAuthenticatedTransport(ctx context.Context, authConfig *auth.AuthConfig, logger *slog.Logger, repo ...string) *CustomRoundTripper {
 	// Check if using PAT authentication
 	if authConfig.Token != "" {
-		return newGithubStyleTransportWithAuth(ctx, authConfig, logger)
+		return newGithubStyleTransportWithAuth(authConfig, logger)
 	}
 
 	// Using GitHub App authentication
@@ -255,12 +255,12 @@ func GetAuthenticatedTransport(ctx context.Context, authConfig *auth.AuthConfig,
 		if len(repo) > 0 && repo[0] != "" && strings.Contains(repo[0], "/") {
 			parts := strings.Split(repo[0], "/")
 			orgName := parts[0]
-			return newGithubStyleTransportWithAuth(ctx, authConfig, logger, models.OrganizationType, orgName)
+			return newGithubStyleTransportWithAuth(authConfig, logger, models.OrganizationType, orgName)
 		}
 		// Fall back to generic organization type without specific org name
-		return newGithubStyleTransportWithAuth(ctx, authConfig, logger, models.OrganizationType)
+		return newGithubStyleTransportWithAuth(authConfig, logger, models.OrganizationType)
 	}
 
 	// Default fallback (no auth)
-	return newGithubStyleTransportWithAuth(ctx, authConfig, logger)
+	return newGithubStyleTransportWithAuth(authConfig, logger)
 }
