@@ -19,8 +19,8 @@ var (
 
 var TransformCmd = &cobra.Command{
 	Use:   "transform",
-	Short: "Transform SARIF files into Avro format",
-	Long: `The transform command converts SARIF result files into Avro format
+	Short: "Transform SARIF files into Protobuf format",
+	Long: `The transform command converts SARIF result files into Protobuf format
 for reporting and analytics purposes.
 
 Examples:
@@ -54,7 +54,7 @@ Examples:
 
 func init() {
 	TransformCmd.Flags().StringVar(&sarifDir, "sarif-directory", "", "Path to directory containing SARIF files")
-	TransformCmd.Flags().StringVar(&outputDir, "output", "./avro-output", "Output directory for transformed files")
+	TransformCmd.Flags().StringVar(&outputDir, "output", "./proto-output", "Output directory for transformed files")
 	TransformCmd.Flags().StringVar(&analysisID, "analysis-id", "", "Analysis ID associated with the SARIF files")
 	TransformCmd.Flags().StringVar(&controllerRepo, "controller-repo", "", "Controller repository associated with the analysis")
 
@@ -72,18 +72,18 @@ func runTransform(cmd *cobra.Command, args []string) error {
 	service := service.NewTransformService(logger, sarifDir, outputDir, analysisID, controllerRepo)
 
 	// Use command context which handles cancellation (Ctrl+C)
-	avroResult, err := service.Transform(cmd.Context())
+	result, err := service.Transform(cmd.Context())
 	if err != nil {
 		return err
 	}
-	// Write to Avro files
-	if err := service.WriteAvroFiles(avroResult); err != nil {
-		return fmt.Errorf("failed to write Avro files: %w", err)
+	// Write to Protobuf files
+	if err := service.WriteProtoFiles(result); err != nil {
+		return fmt.Errorf("failed to write proto files: %w", err)
 	}
 
 	logger.Info("Transformation completed successfully",
-		"total_repositories", len(avroResult.Repositories),
-		"total_rules", len(avroResult.Rules))
+		"total_repositories", len(result.Repositories),
+		"total_rules", len(result.Rules))
 
 	return nil
 }

@@ -149,6 +149,13 @@ func newGithubStyleTransportWithAuth(authConfig *auth.AuthConfig, logger *slog.L
 		"X-GitHub-Api-Version": "2022-11-28",
 	}
 
+	// Create TokenService once so its installation cache persists across token refreshes
+	ts := auth.NewTokenService(
+		authConfig.AppID,
+		authConfig.PrivateKey,
+		authConfig.BaseURL,
+	)
+
 	authProv := func(req *http.Request) (string, error) {
 		// Check if using PAT token
 		if token := authConfig.Token; token != "" {
@@ -186,12 +193,6 @@ func newGithubStyleTransportWithAuth(authConfig *auth.AuthConfig, logger *slog.L
 		if cached, ok := globalTokenCache.tokens[cacheKey]; ok && time.Now().Before(cached.expires) {
 			return "Bearer " + cached.token, nil
 		}
-
-		ts := auth.NewTokenService(
-			authConfig.AppID,
-			authConfig.PrivateKey,
-			authConfig.BaseURL,
-		)
 
 		var tokenStr string
 		var err error

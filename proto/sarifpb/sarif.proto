@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package sarif;
+
+option go_package = "github.com/ghas-projects/sarif-avro/proto/sarifpb";
+
+message Repository {
+  int32 repository_id = 1;
+  string repository_name = 2;
+  string repository_url = 3;
+}
+
+message Run {
+  int32 run_id = 1;
+  string tool_name = 2;
+  optional string tool_version = 3;
+  string analysis_id = 4;
+  optional string controller_repo = 5;
+  optional string date = 6;
+}
+
+message Rule {
+  int32 rule_id = 1;
+  string id = 2;
+  string rule_name = 3;
+  optional string rule_description = 4;
+  repeated string property_tags = 5;
+  string kind = 6;
+  optional string severity_level = 7;
+}
+
+message Alert {
+  int32 alert_id = 1;
+  string file_path = 2;
+  optional int32 start_line = 3;
+  optional int32 start_column = 4;
+  optional int32 end_line = 5;
+  optional int32 end_column = 6;
+  optional string code_snippet_source = 7;
+  optional string code_snippet_sink = 8;
+  optional string code_snippet = 9;
+  optional string code_snippet_context = 10;
+  string message = 11;
+  optional string result_fingerprint = 12;
+  optional int32 step_count = 13;
+  int32 repository_id = 14;
+  int32 analysis_id = 15;
+  int32 rule_id = 16;
+}
+
+// Wrapper messages for serializing collections
+message RepositoryList {
+  repeated Repository repositories = 1;
+}
+
+message RunList {
+  repeated Run runs = 1;
+}
+
+message RuleList {
+  repeated Rule rules = 1;
+}
+
+message AlertList {
+  repeated Alert alerts = 1;
+}

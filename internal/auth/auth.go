@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v4"
@@ -36,6 +37,15 @@ type TokenService struct {
 	appID      string
 	privateKey string
 	baseURL    string
+
+	parsedKeyOnce sync.Once
+	parsedKey     *rsa.PrivateKey
+	parsedKeyErr  error
+
+	// Cache installation IDs to avoid fetching all installations on every token refresh.
+	// Key: "type:<targetType>" or "org:<orgLogin>", Value: Installation
+	installationsMu   sync.RWMutex
+	installationCache map[string]Installation
 }
 
 // Installation represents a GitHub App installation
@@ -57,33 +67,48 @@ type InstallationToken struct {
 // NewTokenService creates a new TokenService
 func NewTokenService(appID, privateKey, baseURL string) *TokenService {
 	return &TokenService{
-		appID:      appID,
-		privateKey: privateKey,
-		baseURL:    baseURL,
+		appID:             appID,
+		privateKey:        privateKey,
+		baseURL:           baseURL,
+		installationCache: make(map[string]Installation),
 	}
+}
+
+// parsePrivateKey parses the PEM-encoded private key once and caches the result
+func (ts *TokenService) parsePrivateKey() (*rsa.PrivateKey, error) {
+	ts.parsedKeyOnce.Do(func() {
+		block, _ := pem.Decode([]byte(ts.privateKey))
+		if block == nil {
+			ts.parsedKeyErr = fmt.Errorf("failed to decode PEM block from private key")
+			return
+		}
+
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			// Try PKCS8 format
+			parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				ts.parsedKeyErr = fmt.Errorf("failed to parse private key: %w", err)
+				return
+			}
+			var ok bool
+			key, ok = parsed.(*rsa.PrivateKey)
+			if !ok {
+				ts.parsedKeyErr = fmt.Errorf("not an RSA private key")
+				return
+			}
+		}
+		ts.parsedKey = key
+	})
+	return ts.parsedKey, ts.parsedKeyErr
 }
 
 // CreateJWT generates a JWT for GitHub App authentication
 func (ts *TokenService) CreateJWT() (string, error) {
 
-	privateKeyData := []byte(ts.privateKey)
-	block, _ := pem.Decode(privateKeyData)
-	if block == nil {
-		return "", fmt.Errorf("failed to decode PEM block from private key")
-	}
-
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	privateKey, err := ts.parsePrivateKey()
 	if err != nil {
-		// Try PKCS8 format
-		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse private key: %w", err)
-		}
-		var ok bool
-		privateKey, ok = key.(*rsa.PrivateKey)
-		if !ok {
-			return "", fmt.Errorf("not an RSA private key")
-		}
+		return "", err
 	}
 
 	// Create the JWT claims
@@ -194,40 +219,74 @@ func (ts *TokenService) CreateInstallationToken(jwt string, installationID int64
 	return &token, nil
 }
 
+// getOrFetchInstallation returns a cached installation or fetches all installations and caches the match.
+func (ts *TokenService) getOrFetchInstallation(cacheKey string, matchFn func(Installation) bool) (Installation, error) {
+	// Check cache first
+	ts.installationsMu.RLock()
+	if inst, ok := ts.installationCache[cacheKey]; ok {
+		ts.installationsMu.RUnlock()
+		return inst, nil
+	}
+	ts.installationsMu.RUnlock()
+
+	// Cache miss — fetch all installations and populate cache
+	jwtToken, err := ts.CreateJWT()
+	if err != nil {
+		return Installation{}, fmt.Errorf("failed to create JWT: %w", err)
+	}
+
+	installations, err := ts.GetInstallations(jwtToken)
+	if err != nil {
+		return Installation{}, fmt.Errorf("failed to get installations: %w", err)
+	}
+
+	if len(installations) == 0 {
+		return Installation{}, fmt.Errorf("no installations found for this GitHub App")
+	}
+
+	// Cache all installations by both org and type for future lookups
+	ts.installationsMu.Lock()
+	for _, inst := range installations {
+		if inst.Account.Login != "" {
+			ts.installationCache["org:"+inst.Account.Login] = inst
+		}
+		if inst.TargetType != "" {
+			// Only cache the first match per type (same as original loop behavior)
+			typeKey := "type:" + inst.TargetType
+			if _, exists := ts.installationCache[typeKey]; !exists {
+				ts.installationCache[typeKey] = inst
+			}
+		}
+	}
+	ts.installationsMu.Unlock()
+
+	// Now look up from cache
+	ts.installationsMu.RLock()
+	inst, ok := ts.installationCache[cacheKey]
+	ts.installationsMu.RUnlock()
+
+	if !ok {
+		return Installation{}, fmt.Errorf("no matching installation found for key: %s", cacheKey)
+	}
+
+	return inst, nil
+}
+
 // GetInstallationToken is a convenience method that creates a JWT and exchanges it for an installation token
 // This is what is used in the application code
 func (ts *TokenService) GetInstallationToken(tokenType string) (InstallationTokenInfo, error) {
-	// Create JWT
-	jwt, err := ts.CreateJWT()
+	inst, err := ts.getOrFetchInstallation("type:"+tokenType, nil)
+	if err != nil {
+		return InstallationTokenInfo{}, err
+	}
+
+	// Create JWT for token exchange
+	jwtToken, err := ts.CreateJWT()
 	if err != nil {
 		return InstallationTokenInfo{}, fmt.Errorf("failed to create JWT: %w", err)
 	}
 
-	// Get installations
-	installations, err := ts.GetInstallations(jwt)
-	if err != nil {
-		return InstallationTokenInfo{}, fmt.Errorf("failed to get installations: %w", err)
-	}
-
-	if len(installations) == 0 {
-		return InstallationTokenInfo{}, fmt.Errorf("no installations found for this GitHub App")
-	}
-
-	var installationID int64
-	var clientID string
-
-	for _, installation := range installations {
-		if installation.TargetType == tokenType {
-			installationID = installation.ID
-			clientID = installation.ClientID
-			break
-		}
-	}
-
-	if installationID == 0 {
-		return InstallationTokenInfo{}, fmt.Errorf("no suitable installation found for this GitHub App")
-	}
-	token, err := ts.CreateInstallationToken(jwt, installationID)
+	token, err := ts.CreateInstallationToken(jwtToken, inst.ID)
 	if err != nil {
 		return InstallationTokenInfo{}, fmt.Errorf("failed to create installation token: %w", err)
 	}
@@ -235,8 +294,8 @@ func (ts *TokenService) GetInstallationToken(tokenType string) (InstallationToke
 	installationToken := InstallationTokenInfo{
 		Token:     token.Token,
 		ExpiresAt: token.ExpiresAt.Format(time.RFC3339),
-		ClientID:  clientID,
-		AppID:     fmt.Sprintf("%d", installationID),
+		ClientID:  inst.ClientID,
+		AppID:     fmt.Sprintf("%d", inst.ID),
 	}
 
 	return installationToken, nil
@@ -244,27 +303,18 @@ func (ts *TokenService) GetInstallationToken(tokenType string) (InstallationToke
 
 // GetInstallationTokenForOrg gets an installation token for a specific organization
 func (ts *TokenService) GetInstallationTokenForOrg(orgLogin string) (string, error) {
-	jwt, err := ts.CreateJWT()
+	inst, err := ts.getOrFetchInstallation("org:"+orgLogin, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Create JWT for token exchange
+	jwtToken, err := ts.CreateJWT()
 	if err != nil {
 		return "", fmt.Errorf("failed to create JWT: %w", err)
 	}
-	installations, err := ts.GetInstallations(jwt)
-	if err != nil {
-		return "", fmt.Errorf("failed to get installations: %w", err)
-	}
-	var installationID int64
-	for _, installation := range installations {
-		if installation.Account.Login == orgLogin {
-			installationID = installation.ID
-			break
-		}
-	}
-	if installationID == 0 {
-		return "", fmt.Errorf("no installation found for organization: %s", orgLogin)
-	}
 
-	// Create installation token
-	token, err := ts.CreateInstallationToken(jwt, installationID)
+	token, err := ts.CreateInstallationToken(jwtToken, inst.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create installation token: %w", err)
 	}

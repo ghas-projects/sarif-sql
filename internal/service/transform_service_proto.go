@@ -7,29 +7,31 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ghas-projects/sarif-avro/internal/models"
+	pb "github.com/ghas-projects/sarif-avro/proto/sarifpb"
 	"github.com/ghas-projects/sarif-avro/util"
-	"github.com/hamba/avro/ocf"
+	"google.golang.org/protobuf/proto"
 )
 
-// AvroResultCollector provides thread-safe access to the master AvroResult structure
-type AvroResultCollector struct {
+// ResultCollector provides thread-safe access to the master result structure
+type ResultCollector struct {
 	alertsMu sync.Mutex
-	Alerts   []models.AvroAlert
+	Alerts   []*pb.Alert
 
 	runOnce sync.Once // Ensures run is only set once
-	Runs    models.AvroRun
+	Runs    *pb.Run
 
 	reposMu      sync.RWMutex
-	Repositories map[string]models.AvroRepository
+	Repositories map[string]*pb.Repository
 
 	rulesMu sync.RWMutex
-	Rules   map[string]models.AvroRule
+	Rules   map[string]*pb.Rule
 
 	// Atomic counters for unique ID generation across goroutines
 	alertCounter      int64
@@ -37,32 +39,32 @@ type AvroResultCollector struct {
 	repositoryCounter int64
 }
 
-// NewAvroResultCollector creates a new AvroResultCollector instance
-func NewAvroResultCollector() *AvroResultCollector {
-	return &AvroResultCollector{
-		Repositories: make(map[string]models.AvroRepository),
-		Rules:        make(map[string]models.AvroRule),
-		Alerts:       make([]models.AvroAlert, 0),
-		Runs:         models.AvroRun{},
+// NewResultCollector creates a new ResultCollector instance
+func NewResultCollector() *ResultCollector {
+	return &ResultCollector{
+		Repositories: make(map[string]*pb.Repository),
+		Rules:        make(map[string]*pb.Rule),
+		Alerts:       make([]*pb.Alert, 0),
+		Runs:         &pb.Run{},
 	}
 }
 
 // AddAlerts adds multiple alerts in a single lock operation (more efficient)
-func (s *AvroResultCollector) AddAlerts(alerts []models.AvroAlert) {
+func (s *ResultCollector) AddAlerts(alerts []*pb.Alert) {
 	s.alertsMu.Lock()
 	s.Alerts = append(s.Alerts, alerts...)
 	s.alertsMu.Unlock()
 }
 
 // AddRun adds a run to the master structure (only once, first goroutine wins)
-func (s *AvroResultCollector) AddRun(run models.AvroRun) {
+func (s *ResultCollector) AddRun(run *pb.Run) {
 	s.runOnce.Do(func() {
 		s.Runs = run
 	})
 }
 
 // AddRepository adds or updates a repository (auto-dedups by key, skips if already exists)
-func (s *AvroResultCollector) AddRepository(key string, repo models.AvroRepository) {
+func (s *ResultCollector) AddRepository(key string, repo *pb.Repository) {
 	s.reposMu.Lock()
 	// Only add if not already present (optimization to avoid redundant overwrites)
 	if _, exists := s.Repositories[key]; !exists {
@@ -72,7 +74,7 @@ func (s *AvroResultCollector) AddRepository(key string, repo models.AvroReposito
 }
 
 // AddRules adds multiple rules in a single lock operation (skips if already exists)
-func (s *AvroResultCollector) AddRules(rules map[string]models.AvroRule) {
+func (s *ResultCollector) AddRules(rules map[string]*pb.Rule) {
 	s.rulesMu.Lock()
 	for id, rule := range rules {
 		// Only add if not already present (optimization to avoid redundant overwrites)
@@ -83,7 +85,7 @@ func (s *AvroResultCollector) AddRules(rules map[string]models.AvroRule) {
 	s.rulesMu.Unlock()
 }
 
-// TransformService handles SARIF to Avro transformation
+// TransformService handles SARIF to Protobuf transformation
 type TransformService struct {
 	logger         *slog.Logger
 	sarifDirPath   string
@@ -92,106 +94,65 @@ type TransformService struct {
 	controllerRepo string
 }
 
-func (ts *TransformService) WriteAvroFiles(avroResult *AvroResultCollector) error {
+func (ts *TransformService) WriteProtoFiles(result *ResultCollector) error {
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(ts.outputDir, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Write runs to Avro file
-	runsPath := filepath.Join(ts.outputDir, "run.avro")
-	if err := ts.writeAvroFile(runsPath, "schema/run.avsc", []models.AvroRun{avroResult.Runs}); err != nil {
-		return fmt.Errorf("failed to write runs Avro file: %w", err)
+	// Write runs to proto file
+	runList := &pb.RunList{Runs: []*pb.Run{result.Runs}}
+	runsPath := filepath.Join(ts.outputDir, "run.pb")
+	if err := ts.writeProtoFile(runsPath, runList); err != nil {
+		return fmt.Errorf("failed to write runs proto file: %w", err)
 	}
+	ts.logger.Info("successfully wrote runs to proto file", "file", runsPath)
 
-	// Write repositories to Avro file
-	reposPath := filepath.Join(ts.outputDir, "repository.avro")
-	if err := ts.writeAvroFile(reposPath, "schema/repository.avsc", avroResult.Repositories); err != nil {
-		return fmt.Errorf("failed to write repositories Avro file: %w", err)
+	// Write repositories to proto file
+	repos := make([]*pb.Repository, 0, len(result.Repositories))
+	for _, repo := range result.Repositories {
+		repos = append(repos, repo)
 	}
+	repoList := &pb.RepositoryList{Repositories: repos}
+	reposPath := filepath.Join(ts.outputDir, "repository.pb")
+	if err := ts.writeProtoFile(reposPath, repoList); err != nil {
+		return fmt.Errorf("failed to write repositories proto file: %w", err)
+	}
+	ts.logger.Info("successfully wrote repositories to proto file", "file", reposPath)
 
-	// Write rules to Avro file
-	rulesPath := filepath.Join(ts.outputDir, "rule.avro")
-	if err := ts.writeAvroFile(rulesPath, "schema/rule.avsc", avroResult.Rules); err != nil {
-		return fmt.Errorf("failed to write rules Avro file: %w", err)
+	// Write rules to proto file
+	rules := make([]*pb.Rule, 0, len(result.Rules))
+	for _, rule := range result.Rules {
+		rules = append(rules, rule)
 	}
+	ruleList := &pb.RuleList{Rules: rules}
+	rulesPath := filepath.Join(ts.outputDir, "rule.pb")
+	if err := ts.writeProtoFile(rulesPath, ruleList); err != nil {
+		return fmt.Errorf("failed to write rules proto file: %w", err)
+	}
+	ts.logger.Info("successfully wrote rules to proto file", "file", rulesPath)
 
-	// Write alerts to Avro file
-	alertsPath := filepath.Join(ts.outputDir, "alert.avro")
-	if err := ts.writeAvroFile(alertsPath, "schema/alert.avsc", avroResult.Alerts); err != nil {
-		return fmt.Errorf("failed to write alerts Avro file: %w", err)
+	// Write alerts to proto file
+	alertList := &pb.AlertList{Alerts: result.Alerts}
+	alertsPath := filepath.Join(ts.outputDir, "alert.pb")
+	if err := ts.writeProtoFile(alertsPath, alertList); err != nil {
+		return fmt.Errorf("failed to write alerts proto file: %w", err)
 	}
+	ts.logger.Info("successfully wrote alerts to proto file", "file", alertsPath)
 
 	return nil
-
 }
 
-// writeAvroFile writes a slice of records to an Avro OCF file using linkedin/goavro
-func (ts *TransformService) writeAvroFile(filePath string, schemaPath string, records interface{}) error {
-	// Read schema file
-	schemaBytes, err := os.ReadFile(schemaPath)
+// writeProtoFile marshals a protobuf message and writes it to a file
+func (ts *TransformService) writeProtoFile(filePath string, msg proto.Message) error {
+	data, err := proto.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("failed to read schema file %s: %w", schemaPath, err)
-	}
-	schema := string(schemaBytes)
-
-	// Create output file
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file %s: %w", filePath, err)
-	}
-	defer file.Close()
-
-	// Create Avro Encoder
-	enc, err := ocf.NewEncoder(schema, file)
-	if err != nil {
-		return fmt.Errorf("failed to create Avro encoder: %w", err)
+		return fmt.Errorf("failed to marshal proto message: %w", err)
 	}
 
-	switch v := records.(type) {
-	case []models.AvroRun:
-		for _, run := range v {
-			if err := enc.Encode(run); err != nil {
-				return fmt.Errorf("failed to encode run record: %w", err)
-			}
-		}
-		ts.logger.Info("successfully wrote runs to Avro file",
-			"file", filePath)
-	case map[string]models.AvroRepository:
-		for _, repo := range v {
-			if err := enc.Encode(repo); err != nil {
-				return fmt.Errorf("failed to encode repository record: %w", err)
-			}
-		}
-		ts.logger.Info("successfully wrote repositories to Avro file",
-			"file", filePath)
-	case map[string]models.AvroRule:
-		for _, rule := range v {
-			if err := enc.Encode(rule); err != nil {
-				return fmt.Errorf("failed to encode rule record: %w", err)
-			}
-		}
-		ts.logger.Info("successfully wrote rules to Avro file",
-			"file", filePath)
-	case []models.AvroAlert:
-		for _, alert := range v {
-			if err := enc.Encode(alert); err != nil {
-				return fmt.Errorf("failed to encode alert record: %w", err)
-			}
-		}
-		ts.logger.Info("successfully wrote alerts to Avro file",
-			"file", filePath)
-	default:
-		return fmt.Errorf("unsupported record type for Avro encoding")
-	}
-
-	if err := enc.Flush(); err != nil {
-		return fmt.Errorf("failed to flush encoder: %w", err)
-	}
-
-	if err := file.Sync(); err != nil {
-		return fmt.Errorf("failed to sync file: %w", err)
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}
 
 	return nil
@@ -208,8 +169,8 @@ func NewTransformService(logger *slog.Logger, sarifDirPath string, outputDir str
 	}
 }
 
-// Transform converts SARIF files to Avro format using Option B (direct write with mutex)
-func (ts *TransformService) Transform(ctx context.Context) (avroResult *AvroResultCollector, err error) {
+// Transform converts SARIF files to Protobuf format
+func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollector, err error) {
 	// Get number of files in directory
 	sarifFiles, err := os.ReadDir(ts.sarifDirPath)
 
@@ -227,7 +188,7 @@ func (ts *TransformService) Transform(ctx context.Context) (avroResult *AvroResu
 		"workers", workers)
 
 	// Create the master structure that all workers will write to directly
-	masterResult := NewAvroResultCollector()
+	masterResult := NewResultCollector()
 	sarifChan := make(chan string, len(sarifFiles))
 
 	var wg sync.WaitGroup
@@ -263,7 +224,7 @@ func (ts *TransformService) Transform(ctx context.Context) (avroResult *AvroResu
 }
 
 // processSarifFiles is the worker function that processes SARIF files and writes directly to the master structure
-func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int, sarifChan <-chan string, masterResult *AvroResultCollector) {
+func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int, sarifChan <-chan string, masterResult *ResultCollector) {
 	for sarifFile := range sarifChan {
 		// Check for cancellation
 		select {
@@ -318,8 +279,8 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 		for runIdx, run := range sarifDoc.Runs {
 
 			// Extract and write run information directly to master
-			avroRun := ts.extractRun(run, runIdx)
-			masterResult.AddRun(avroRun)
+			pbRun := ts.extractRun(run, runIdx)
+			masterResult.AddRun(pbRun)
 
 			// Extract rules and write directly to master (with auto-deduplication)
 			ruleMap := ts.extractRules(run, masterResult)
@@ -329,11 +290,11 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 			repoKey, repo := ts.extractRepository(run, sarifFile, masterResult)
 			masterResult.AddRepository(repoKey, repo)
 
-			// Extract alerts and write directly to master (pass repo ID, run ID, and ruleMap for FK references)
-			alerts := ts.extractAlerts(run, avroRun.RunID, repo.RepositoryID, ruleMap, masterResult)
+			// Extract alerts and write directly to master (pass repo ID and ruleMap for FK references)
+			alerts := ts.extractAlerts(run, repo.RepositoryId, ruleMap, masterResult)
 			masterResult.AddAlerts(alerts)
 
-			ts.logger.Info("transformed SARIF run to Avro",
+			ts.logger.Info("transformed SARIF run to proto",
 				"worker_id", workerId,
 				"sarif_file", sarifFile,
 				"run_index", runIdx,
@@ -345,60 +306,60 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 }
 
 // extractRun extracts run information from SARIF
-func (ts *TransformService) extractRun(run models.SarifRun, runIdx int) models.AvroRun {
-	avroRun := models.AvroRun{
-		RunID:      runIdx,
-		AnalysisID: ts.analysisID,
+func (ts *TransformService) extractRun(run models.SarifRun, runIdx int) *pb.Run {
+	pbRun := &pb.Run{
+		RunId:      int32(runIdx + 1),
+		AnalysisId: ts.analysisID,
 	}
 
 	controllerRepo := ts.controllerRepo
-	avroRun.ControllerRepo = &controllerRepo
+	pbRun.ControllerRepo = &controllerRepo
 	date := time.Now().Format("2006-01-02 15:04:05")
-	avroRun.Date = &date
+	pbRun.Date = &date
 
 	// Extract tool information
-	avroRun.ToolName = run.Tool.Driver.Name
+	pbRun.ToolName = run.Tool.Driver.Name
 	if run.Tool.Driver.SemanticVersion != "" {
 		version := run.Tool.Driver.SemanticVersion
-		avroRun.ToolVersion = &version
+		pbRun.ToolVersion = &version
 	}
 
-	return avroRun
+	return pbRun
 }
 
 // extractRules extracts rules from SARIF run
-func (ts *TransformService) extractRules(run models.SarifRun, masterResult *AvroResultCollector) map[string]models.AvroRule {
-	ruleMap := make(map[string]models.AvroRule)
+func (ts *TransformService) extractRules(run models.SarifRun, masterResult *ResultCollector) map[string]*pb.Rule {
+	ruleMap := make(map[string]*pb.Rule)
 
 	for _, rule := range run.Tool.Driver.Rules {
-		var avroRule models.AvroRule
+		pbRule := &pb.Rule{}
 
 		// Extract rule string ID
 		ruleStringID := rule.ID
-		avroRule.ID = rule.ID
+		pbRule.Id = rule.ID
 
-		// Check if rule already exists in master (to reuse ID across goroutines)
-		masterResult.rulesMu.RLock()
-		existingRule, exists := masterResult.Rules[ruleStringID]
-		masterResult.rulesMu.RUnlock()
-
-		if exists {
+		// Atomically check-and-reserve rule ID under write lock to prevent race conditions
+		masterResult.rulesMu.Lock()
+		if existingRule, exists := masterResult.Rules[ruleStringID]; exists {
 			// Reuse existing numeric ID for consistency
-			avroRule.RuleID = existingRule.RuleID
+			pbRule.RuleId = existingRule.RuleId
 		} else {
 			// Generate new unique rule ID using atomic counter (1-based for primary key)
-			avroRule.RuleID = int(atomic.AddInt64(&masterResult.ruleCounter, 1))
+			pbRule.RuleId = int32(atomic.AddInt64(&masterResult.ruleCounter, 1))
+			// Reserve this ID immediately so other goroutines see it
+			masterResult.Rules[ruleStringID] = pbRule
 		}
+		masterResult.rulesMu.Unlock()
 
-		avroRule.RuleName = rule.Name
+		pbRule.RuleName = rule.Name
 
 		// Extract properties if present
 		if rule.Properties != nil {
 			if desc, ok := rule.Properties["description"].(string); ok {
-				avroRule.RuleDescription = &desc
+				pbRule.RuleDescription = &desc
 			}
 			if kind, ok := rule.Properties["kind"].(string); ok {
-				avroRule.Kind = kind
+				pbRule.Kind = kind
 			}
 			if tags, ok := rule.Properties["tags"].([]interface{}); ok {
 				var tagStrings []string
@@ -407,31 +368,34 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Avro
 						tagStrings = append(tagStrings, tagStr)
 					}
 				}
-				avroRule.PropertyTags = tagStrings
+				pbRule.PropertyTags = tagStrings
 			}
 			if severity, ok := rule.Properties["problem.severity"].(string); ok {
-				avroRule.SeverityLevel = &severity
+				pbRule.SeverityLevel = &severity
 			}
 		}
 
-		ruleMap[avroRule.ID] = avroRule
+		ruleMap[pbRule.Id] = pbRule
 	}
 
 	return ruleMap
 }
 
 // extractAlerts extracts alerts from SARIF run
-func (ts *TransformService) extractAlerts(run models.SarifRun, runID int, repositoryID int, ruleMap map[string]models.AvroRule, masterResult *AvroResultCollector) []models.AvroAlert {
-	var alerts []models.AvroAlert
+func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int32, ruleMap map[string]*pb.Rule, masterResult *ResultCollector) []*pb.Alert {
+	var alerts []*pb.Alert
+
+	// Parse analysis ID from command input
+	analysisID, _ := strconv.Atoi(ts.analysisID)
 
 	for _, result := range run.Results {
 		// Generate unique alert ID using atomic counter (1-based for primary key)
-		alertID := int(atomic.AddInt64(&masterResult.alertCounter, 1))
+		alertID := int32(atomic.AddInt64(&masterResult.alertCounter, 1))
 
-		avroAlert := models.AvroAlert{
-			AlertID:      alertID,
-			AnalysisID:   runID,        // FK to Run.RunID
-			RepositoryID: repositoryID, // FK to Repository.RepositoryID
+		pbAlert := &pb.Alert{
+			AlertId:      alertID,
+			AnalysisId:   int32(analysisID), // FK to analysis from command input
+			RepositoryId: repositoryID,      // FK to Repository.RepositoryID
 			Message:      result.Message.Text,
 		}
 
@@ -439,37 +403,37 @@ func (ts *TransformService) extractAlerts(run models.SarifRun, runID int, reposi
 		ruleIDStr := result.RuleID
 		// First check local ruleMap
 		if rule, found := ruleMap[ruleIDStr]; found {
-			avroAlert.RuleID = rule.RuleID // FK to Rule.RuleID (numeric)
+			pbAlert.RuleId = rule.RuleId // FK to Rule.RuleID (numeric)
 		} else {
 			// Fallback: check master in case rule was defined in another SARIF file
 			masterResult.rulesMu.RLock()
 			if masterRule, found := masterResult.Rules[ruleIDStr]; found {
-				avroAlert.RuleID = masterRule.RuleID
+				pbAlert.RuleId = masterRule.RuleId
 			}
 			masterResult.rulesMu.RUnlock()
 		}
 
 		// Extract location information
-		ts.extractLocation(&avroAlert, result)
+		ts.extractLocation(pbAlert, result)
 
 		// Extract fingerprints
 		if result.PartialFingerprint != nil {
 			if primaryHash, ok := result.PartialFingerprint["primaryLocationLineHash"]; ok {
-				avroAlert.ResultFingerprint = &primaryHash
+				pbAlert.ResultFingerprint = &primaryHash
 			}
 		}
 
 		// Extract code flow information
-		ts.extractCodeFlow(&avroAlert, result)
+		ts.extractCodeFlow(pbAlert, result)
 
-		alerts = append(alerts, avroAlert)
+		alerts = append(alerts, pbAlert)
 	}
 
 	return alerts
 }
 
 // extractLocation extracts location information from a result
-func (ts *TransformService) extractLocation(avroAlert *models.AvroAlert, result models.SarifResult) {
+func (ts *TransformService) extractLocation(pbAlert *pb.Alert, result models.SarifResult) {
 	if len(result.Locations) == 0 {
 		return
 	}
@@ -478,49 +442,49 @@ func (ts *TransformService) extractLocation(avroAlert *models.AvroAlert, result 
 	physLoc := loc.PhysicalLocation
 
 	// Extract file path
-	avroAlert.FilePath = physLoc.ArtifactLocation.URI
+	pbAlert.FilePath = physLoc.ArtifactLocation.URI
 
 	// Extract region information
 	if physLoc.Region.StartLine > 0 {
-		startLine := physLoc.Region.StartLine
-		avroAlert.StartLine = &startLine
+		startLine := int32(physLoc.Region.StartLine)
+		pbAlert.StartLine = &startLine
 
 		if physLoc.Region.StartColumn > 0 {
-			startColumn := physLoc.Region.StartColumn
-			avroAlert.StartColumn = &startColumn
+			startColumn := int32(physLoc.Region.StartColumn)
+			pbAlert.StartColumn = &startColumn
 		}
 
 		// Use endLine if present, otherwise fall back to startLine (single-line issue)
 		if physLoc.Region.EndLine > 0 {
-			endLine := physLoc.Region.EndLine
-			avroAlert.EndLine = &endLine
+			endLine := int32(physLoc.Region.EndLine)
+			pbAlert.EndLine = &endLine
 		} else {
-			avroAlert.EndLine = &startLine
+			pbAlert.EndLine = &startLine
 		}
 
 		if physLoc.Region.EndColumn > 0 {
-			endColumn := physLoc.Region.EndColumn
-			avroAlert.EndColumn = &endColumn
+			endColumn := int32(physLoc.Region.EndColumn)
+			pbAlert.EndColumn = &endColumn
 		}
 	}
 
 	// Extract code snippet from context region
 	if physLoc.ContextRegion.Snippet.Text != "" {
 		contextText := physLoc.ContextRegion.Snippet.Text
-		avroAlert.CodeSnippetContext = &contextText
+		pbAlert.CodeSnippetContext = &contextText
 
 		// Extract exact code using region coordinates
 		if physLoc.Region.StartLine > 0 {
 			exactCode := ts.extractCodeFromSnippetStructured(contextText, physLoc.Region, physLoc.ContextRegion)
 			if exactCode != "" {
-				avroAlert.CodeSnippet = &exactCode
+				pbAlert.CodeSnippet = &exactCode
 			}
 		}
 	}
 }
 
 // extractCodeFlow extracts code flow information (source/sink, step count)
-func (ts *TransformService) extractCodeFlow(avroAlert *models.AvroAlert, result models.SarifResult) {
+func (ts *TransformService) extractCodeFlow(pbAlert *pb.Alert, result models.SarifResult) {
 	if len(result.CodeFlows) == 0 {
 		return
 	}
@@ -533,8 +497,8 @@ func (ts *TransformService) extractCodeFlow(avroAlert *models.AvroAlert, result 
 	threadFlow := codeFlow.ThreadFlows[0]
 	locations := threadFlow.Locations
 
-	stepCount := len(locations)
-	avroAlert.StepCount = &stepCount
+	stepCount := int32(len(locations))
+	pbAlert.StepCount = &stepCount
 
 	// Find source and sink code snippets
 	for _, tfLoc := range locations {
@@ -555,9 +519,9 @@ func (ts *TransformService) extractCodeFlow(avroAlert *models.AvroAlert, result 
 			if snippet != "" {
 				switch role {
 				case "source":
-					avroAlert.CodeSnippetSource = &snippet
+					pbAlert.CodeSnippetSource = &snippet
 				case "sink":
-					avroAlert.CodeSnippetSink = &snippet
+					pbAlert.CodeSnippetSink = &snippet
 				}
 			}
 		}
@@ -593,17 +557,17 @@ func (ts *TransformService) extractCodeFromSnippetStructured(snippetText string,
 }
 
 // extractRepository creates repository information from SARIF file
-func (ts *TransformService) extractRepository(run models.SarifRun, sarifFile string, masterResult *AvroResultCollector) (string, models.AvroRepository) {
+func (ts *TransformService) extractRepository(run models.SarifRun, sarifFile string, masterResult *ResultCollector) (string, *pb.Repository) {
 
-	repo := models.AvroRepository{
+	repo := &pb.Repository{
 		RepositoryName: sarifFile, // Fallback to filename
-		RepositoryURL:  "",
+		RepositoryUrl:  "",
 	}
 
 	// Extract from versionControlProvenance if available
 	if len(run.VersionControlProvenance) > 0 {
 		repoUri := run.VersionControlProvenance[0].RepositoryURI
-		repo.RepositoryURL = repoUri
+		repo.RepositoryUrl = repoUri
 
 		// Extract repository name from URL (e.g., "mrva-security-demo/anaconda")
 		if parts := strings.Split(repoUri, "/"); len(parts) >= 2 {
@@ -612,23 +576,23 @@ func (ts *TransformService) extractRepository(run models.SarifRun, sarifFile str
 	}
 
 	// Use repository URL as the unique identifier
-	repoKey := repo.RepositoryURL
+	repoKey := repo.RepositoryUrl
 	if repoKey == "" {
 		repoKey = repo.RepositoryName // Fallback to name if no URL
 	}
 
-	// Check if repository already exists in master (to reuse ID across goroutines)
-	masterResult.reposMu.RLock()
-	existingRepo, exists := masterResult.Repositories[repoKey]
-	masterResult.reposMu.RUnlock()
-
-	if exists {
+	// Atomically check-and-reserve repository ID under write lock to prevent race conditions
+	masterResult.reposMu.Lock()
+	if existingRepo, exists := masterResult.Repositories[repoKey]; exists {
 		// Reuse existing repository ID
-		repo.RepositoryID = existingRepo.RepositoryID
+		repo.RepositoryId = existingRepo.RepositoryId
 	} else {
 		// Generate new unique repository ID using atomic counter (1-based for primary key)
-		repo.RepositoryID = int(atomic.AddInt64(&masterResult.repositoryCounter, 1))
+		repo.RepositoryId = int32(atomic.AddInt64(&masterResult.repositoryCounter, 1))
+		// Reserve this ID immediately so other goroutines see it
+		masterResult.Repositories[repoKey] = repo
 	}
+	masterResult.reposMu.Unlock()
 
 	return repoKey, repo
 }
