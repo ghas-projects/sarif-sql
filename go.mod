@@ -1,4 +1,4 @@
-module github.com/ghas-projects/sarif-avro
+module github.com/ghas-projects/sarif-protobuf
 
 go 1.25.2
 

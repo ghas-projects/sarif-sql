@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ghas-projects/sarif-avro/internal/models"
+	"github.com/ghas-projects/sarif-protobuf/internal/models"
 )
 
 // ParseRepositoriesFromFile reads repositories from a file (TOML or JSON)

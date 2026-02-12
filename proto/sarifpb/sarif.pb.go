@@ -669,7 +669,7 @@ const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\bRuleList\x12!\n" +
 	"\x05rules\x18\x01 \x03(\v2\v.sarif.RuleR\x05rules\"1\n" +
 	"\tAlertList\x12$\n" +
-	"\x06alerts\x18\x01 \x03(\v2\f.sarif.AlertR\x06alertsB3Z1github.com/ghas-projects/sarif-avro/proto/sarifpbb\x06proto3"
+	"\x06alerts\x18\x01 \x03(\v2\f.sarif.AlertR\x06alertsB7Z5github.com/ghas-projects/sarif-protobuf/proto/sarifpbb\x06proto3"
 
 var (
 	file_proto_sarifpb_sarif_proto_rawDescOnce sync.Once

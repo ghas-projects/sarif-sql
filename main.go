@@ -1,6 +1,6 @@
 package main
 
-import "github.com/ghas-projects/sarif-avro/cmd"
+import "github.com/ghas-projects/sarif-protobuf/cmd"
 
 func main() {
 	cmd.Execute()

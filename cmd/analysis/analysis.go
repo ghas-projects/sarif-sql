@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ghas-projects/sarif-avro/internal/auth"
-	"github.com/ghas-projects/sarif-avro/internal/models"
-	"github.com/ghas-projects/sarif-avro/internal/parser"
-	"github.com/ghas-projects/sarif-avro/internal/service"
+	"github.com/ghas-projects/sarif-protobuf/internal/auth"
+	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	"github.com/ghas-projects/sarif-protobuf/internal/parser"
+	"github.com/ghas-projects/sarif-protobuf/internal/service"
 	"github.com/spf13/cobra"
 )
 

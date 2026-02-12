@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ghas-projects/sarif-avro/internal/models"
-	pb "github.com/ghas-projects/sarif-avro/proto/sarifpb"
-	"github.com/ghas-projects/sarif-avro/util"
+	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	pb "github.com/ghas-projects/sarif-protobuf/proto/sarifpb"
+	"github.com/ghas-projects/sarif-protobuf/util"
 	"google.golang.org/protobuf/proto"
 )
 

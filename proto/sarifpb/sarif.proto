@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package sarif;
 
-option go_package = "github.com/ghas-projects/sarif-avro/proto/sarifpb";
+option go_package = "github.com/ghas-projects/sarif-protobuf/proto/sarifpb";
 
 message Repository {
   int32 repository_id = 1;

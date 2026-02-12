@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/ghas-projects/sarif-avro/internal/auth"
+	"github.com/ghas-projects/sarif-protobuf/internal/auth"
 )
 
 // Client is a GitHub API client that manages HTTP connections and authentication

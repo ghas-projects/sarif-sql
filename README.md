@@ -1,11 +1,11 @@
-# SARIF-Avro
+# SARIF-Proto
 
-A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into Avro format for efficient data processing and analytics.
+A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into Protocol Buffer (Protobuf) format for efficient data processing and analytics.
 
 ## Features
 
 - 🚀 **High Performance**: Concurrent processing with optimized JSON parsing and HTTP connection pooling
-- 🔄 **SARIF to Avro Transformation**: Convert Code Scanning results to Avro for data warehousing
+- 🔄 **SARIF to Protobuf Transformation**: Convert Code Scanning results to Protobuf for data warehousing
 - 📊 **MRVA Lifecycle Management**: Start, download, and summarize multi-repository analyses
 - 🛡️ **Robust Error Handling**: Graceful cancellation support and comprehensive logging
 - 🔐 **Flexible Authentication**: Support for both GitHub App and Personal Access Token authentication
@@ -20,38 +20,37 @@ A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repositor
 ### Build from Source
 
 ```bash
-git clone https://github.com/ghas-projects/sarif-avro.git
-cd sarif-avro
-go build
+git clone https://github.com/ghas-projects/sarif-protobuf.git
+cd sarif-protobuf
+go build -o sarif-protobuf
 ```
 
-The binary will be created as `sarif-avro` in the current directory.
+The binary will be created as `sarif-protobuf` in the current directory.
 
 ## Usage
 
-### Transform SARIF to Avro
+### Transform SARIF to Protobuf
 
-Convert SARIF files to Avro format for analytics and reporting:
+Convert SARIF files to Protobuf format for analytics and reporting:
 
 ```bash
-./sarif-avro transform \
-  --sarif-directory ./analyses/12345-org-repo \
+./sarif-protobuf transform \
   --analysis-id 12345 \
   --controller-repo org/repo \
-  --output ./avro-output
+  --output ./proto-output
 ```
 
 **Options:**
 - `--sarif-directory`: Directory containing SARIF files (required)
 - `--analysis-id`: Analysis ID for tracking (required)
 - `--controller-repo`: Controller repository in owner/name format (required)
-- `--output`: Output directory for Avro files (default: `./avro-output`)
+- `--output`: Output directory for Protobuf files (default: `./proto-output`)
 
 **Output Files:**
-- `run.avro` - Analysis run metadata
-- `repository.avro` - Repository information
-- `rule.avro` - Security rule definitions
-- `alert.avro` - Security findings/alerts
+- `run.pb` - Analysis run metadata
+- `repository.pb` - Repository information
+- `rule.pb` - Security rule definitions
+- `alert.pb` - Security findings/alerts
 
 ### MRVA Analysis Management
 
@@ -60,7 +59,7 @@ Convert SARIF files to Avro format for analytics and reporting:
 Initialize directory structure for a new MRVA analysis:
 
 ```bash
-./sarif-avro analysis start \
+./sarif-protobuf analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
   --repos-file repos.toml \
@@ -70,7 +69,7 @@ Initialize directory structure for a new MRVA analysis:
 Or with GitHub App authentication:
 
 ```bash
-./sarif-avro analysis start \
+./sarif-protobuf analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
   --repos "org/repo1,org/repo2,org/repo3" \
@@ -83,10 +82,7 @@ Or with GitHub App authentication:
 Download SARIF artifacts from completed analyses:
 
 ```bash
-./sarif-avro analysis download \
-  --analysis-id 12345 \
-  --controller-repo org/repo \
-  --directory ./analyses/12345-org-repo \
+./sarif-protobuf analysis download \
   --repos-file repos.toml \
   --token $GITHUB_TOKEN
 ```
@@ -98,14 +94,7 @@ Generates a status report at `reports/{analysis-id}-{repo}-status-report.md`
 Fetch and generate summary report for an MRVA analysis:
 
 ```bash
-./sarif-avro analysis summary \
-  --analysis-id 12345 \
-  --controller-repo org/repo \
-  --repos-file repos.toml \
-  --token $GITHUB_TOKEN
-```
-
-Generates a summary report at `reports/summary/{analysis-id}-{repo}-summary-report.md`
+./sarif-protobuf analysis summary \ at `reports/summary/{analysis-id}-{repo}-summary-report.md`
 
 ### Repository List Formats
 
@@ -144,7 +133,7 @@ full_name = "owner/repo3"
 
 ```bash
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
-./sarif-avro analysis download --token $GITHUB_TOKEN ...
+./sarif-protobuf analysis download --token $GITHUB_TOKEN ...
 ```
 
 **Required Scopes:**
@@ -158,8 +147,7 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 ...
 -----END RSA PRIVATE KEY-----"
 
-./sarif-avro analysis download \
-  --app-id 123456 \
+./sarif-protobuf analysis download \
   --private-key "$GITHUB_APP_PRIVATE_KEY" \
   ...
 ```
@@ -185,20 +173,23 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 ### Project Structure
 
 ```
-sarif-avro/
+sarif-protobuf/
 ├── cmd/                    # CLI commands
 │   ├── analysis/          # MRVA analysis commands
 │   └── transform/         # SARIF transformation commands
 ├── internal/
 │   ├── auth/             # Authentication (PAT & GitHub App)
 │   ├── github/           # GitHub API client
-│   ├── models/           # Data models (SARIF, Avro, API)
+│   ├── models/           # Data models (SARIF, API)
 │   ├── parser/           # Repository file parsers
 │   └── service/          # Business logic
-│       ├── analysis_service.go  # MRVA operations
-│       ├── transform_service.go # SARIF→Avro conversion
-│       └── report.go            # Markdown report generation
-├── schema/               # Avro schemas (.avsc)
+│       ├── analysis_service.go       # MRVA operations
+│       ├── transform_service_proto.go # SARIF→Protobuf conversion
+│       └── report.go                 # Markdown report generation
+├── proto/
+│   └── sarifpb/          # Protobuf schema and generated Go code
+│       ├── sarif.proto
+│       └── sarif.pb.go
 ├── util/                 # Utilities (logging, workers)
 └── main.go
 ```
@@ -219,7 +210,7 @@ This tool is optimized for processing large-scale MRVA analyses:
 
 ## Logging
 
-All operations log to `logs/sarif-avro-YYYYMMDD-HHMMSS.json` in structured JSON format:
+All operations log to `logs/sarif-protobuf-YYYYMMDD-HHMMSS.json` in structured JSON format:
 
 ```json
 {"time":"2026-02-06T14:07:49Z","level":"INFO","msg":"transformation completed","total_alerts":3230,"total_repositories":10}
@@ -238,7 +229,7 @@ All operations log to `logs/sarif-avro-YYYYMMDD-HHMMSS.json` in structured JSON 
 
 ```bash
 # 1. Start analysis
-./sarif-avro analysis start \
+./sarif-protobuf analysis start \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --repos-file repos.toml \
@@ -247,22 +238,22 @@ All operations log to `logs/sarif-avro-YYYYMMDD-HHMMSS.json` in structured JSON 
 # 2. Wait for analysis to complete (check GitHub UI or use summary command)
 
 # 3. Download SARIF artifacts
-./sarif-avro analysis download \
+./sarif-protobuf analysis download \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --directory ./analyses/12345-org-controller \
   --repos-file repos.toml \
   --token $GITHUB_TOKEN
 
-# 4. Transform to Avro
-./sarif-avro transform \
+# 4. Transform to Protobuf
+./sarif-protobuf transform \
   --sarif-directory ./analyses/12345-org-controller \
   --analysis-id 12345 \
   --controller-repo org/controller \
-  --output ./avro-output
+  --output ./proto-output
 
 # 5. Generate summary report
-./sarif-avro analysis summary \
+./sarif-protobuf analysis summary \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --repos-file repos.toml \
@@ -305,5 +296,5 @@ For issues and questions:
 ## Acknowledgments
 
 - Built with [Cobra](https://github.com/spf13/cobra) for CLI framework
-- Uses [Hamba Avro](https://github.com/hamba/avro) for Avro encoding
+- Uses [Protocol Buffers](https://protobuf.dev/) for efficient binary serialization
 - Designed for GitHub Advanced Security workflows
