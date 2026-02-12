@@ -1,14 +1,6 @@
-# SARIF-Proto
+# SARIF-Protobuf
 
 A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into Protocol Buffer (Protobuf) format for efficient data processing and analytics.
-
-## Features
-
-- 🚀 **High Performance**: Concurrent processing with optimized JSON parsing and HTTP connection pooling
-- 🔄 **SARIF to Protobuf Transformation**: Convert Code Scanning results to Protobuf for data warehousing
-- 📊 **MRVA Lifecycle Management**: Start, download, and summarize multi-repository analyses
-- 🛡️ **Robust Error Handling**: Graceful cancellation support and comprehensive logging
-- 🔐 **Flexible Authentication**: Support for both GitHub App and Personal Access Token authentication
 
 ## Installation
 
