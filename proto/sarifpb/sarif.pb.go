@@ -22,12 +22,16 @@ const (
 )
 
 type Repository struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RepositoryId   int32                  `protobuf:"varint,1,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
-	RepositoryName string                 `protobuf:"bytes,2,opt,name=repository_name,json=repositoryName,proto3" json:"repository_name,omitempty"`
-	RepositoryUrl  string                 `protobuf:"bytes,3,opt,name=repository_url,json=repositoryUrl,proto3" json:"repository_url,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	RowId               int32                  `protobuf:"varint,1,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
+	RepositoryFullName  string                 `protobuf:"bytes,2,opt,name=repository_full_name,json=repositoryFullName,proto3" json:"repository_full_name,omitempty"`
+	RepositoryUrl       string                 `protobuf:"bytes,3,opt,name=repository_url,json=repositoryUrl,proto3" json:"repository_url,omitempty"`
+	AnalysisStatus      string                 `protobuf:"bytes,4,opt,name=analysis_status,json=analysisStatus,proto3" json:"analysis_status,omitempty"`
+	ResultCount         *int32                 `protobuf:"varint,5,opt,name=result_count,json=resultCount,proto3,oneof" json:"result_count,omitempty"`
+	ArtifactSizeInBytes *int32                 `protobuf:"varint,6,opt,name=artifact_size_in_bytes,json=artifactSizeInBytes,proto3,oneof" json:"artifact_size_in_bytes,omitempty"`
+	AnalysisId          string                 `protobuf:"bytes,7,opt,name=analysis_id,json=analysisId,proto3" json:"analysis_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Repository) Reset() {
@@ -60,16 +64,16 @@ func (*Repository) Descriptor() ([]byte, []int) {
 	return file_proto_sarifpb_sarif_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Repository) GetRepositoryId() int32 {
+func (x *Repository) GetRowId() int32 {
 	if x != nil {
-		return x.RepositoryId
+		return x.RowId
 	}
 	return 0
 }
 
-func (x *Repository) GetRepositoryName() string {
+func (x *Repository) GetRepositoryFullName() string {
 	if x != nil {
-		return x.RepositoryName
+		return x.RepositoryFullName
 	}
 	return ""
 }
@@ -81,32 +85,73 @@ func (x *Repository) GetRepositoryUrl() string {
 	return ""
 }
 
-type Run struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RunId          int32                  `protobuf:"varint,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ToolName       string                 `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
-	ToolVersion    *string                `protobuf:"bytes,3,opt,name=tool_version,json=toolVersion,proto3,oneof" json:"tool_version,omitempty"`
-	AnalysisId     string                 `protobuf:"bytes,4,opt,name=analysis_id,json=analysisId,proto3" json:"analysis_id,omitempty"`
-	ControllerRepo *string                `protobuf:"bytes,5,opt,name=controller_repo,json=controllerRepo,proto3,oneof" json:"controller_repo,omitempty"`
-	Date           *string                `protobuf:"bytes,6,opt,name=date,proto3,oneof" json:"date,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+func (x *Repository) GetAnalysisStatus() string {
+	if x != nil {
+		return x.AnalysisStatus
+	}
+	return ""
 }
 
-func (x *Run) Reset() {
-	*x = Run{}
+func (x *Repository) GetResultCount() int32 {
+	if x != nil && x.ResultCount != nil {
+		return *x.ResultCount
+	}
+	return 0
+}
+
+func (x *Repository) GetArtifactSizeInBytes() int32 {
+	if x != nil && x.ArtifactSizeInBytes != nil {
+		return *x.ArtifactSizeInBytes
+	}
+	return 0
+}
+
+func (x *Repository) GetAnalysisId() string {
+	if x != nil {
+		return x.AnalysisId
+	}
+	return ""
+}
+
+type Analysis struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	RowId                int32                  `protobuf:"varint,1,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
+	ToolName             string                 `protobuf:"bytes,2,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	ToolVersion          *string                `protobuf:"bytes,3,opt,name=tool_version,json=toolVersion,proto3,oneof" json:"tool_version,omitempty"`
+	AnalysisId           string                 `protobuf:"bytes,4,opt,name=analysis_id,json=analysisId,proto3" json:"analysis_id,omitempty"`
+	ControllerRepo       *string                `protobuf:"bytes,5,opt,name=controller_repo,json=controllerRepo,proto3,oneof" json:"controller_repo,omitempty"`
+	Date                 *string                `protobuf:"bytes,6,opt,name=date,proto3,oneof" json:"date,omitempty"`
+	State                string                 `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	QueryLanguage        string                 `protobuf:"bytes,8,opt,name=query_language,json=queryLanguage,proto3" json:"query_language,omitempty"`
+	CreatedAt            string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CompletedAt          *string                `protobuf:"bytes,10,opt,name=completed_at,json=completedAt,proto3,oneof" json:"completed_at,omitempty"`
+	Status               string                 `protobuf:"bytes,11,opt,name=status,proto3" json:"status,omitempty"`
+	FailureReason        *string                `protobuf:"bytes,12,opt,name=failure_reason,json=failureReason,proto3,oneof" json:"failure_reason,omitempty"`
+	ScannedReposCount    int32                  `protobuf:"varint,13,opt,name=scanned_repos_count,json=scannedReposCount,proto3" json:"scanned_repos_count,omitempty"`
+	SkippedReposCount    int32                  `protobuf:"varint,14,opt,name=skipped_repos_count,json=skippedReposCount,proto3" json:"skipped_repos_count,omitempty"`
+	NotFoundReposCount   int32                  `protobuf:"varint,15,opt,name=not_found_repos_count,json=notFoundReposCount,proto3" json:"not_found_repos_count,omitempty"`
+	NoCodeqlDbReposCount int32                  `protobuf:"varint,16,opt,name=no_codeql_db_repos_count,json=noCodeqlDbReposCount,proto3" json:"no_codeql_db_repos_count,omitempty"`
+	OverLimitReposCount  int32                  `protobuf:"varint,17,opt,name=over_limit_repos_count,json=overLimitReposCount,proto3" json:"over_limit_repos_count,omitempty"`
+	ActionsWorkflowRunId int32                  `protobuf:"varint,18,opt,name=actions_workflow_run_id,json=actionsWorkflowRunId,proto3" json:"actions_workflow_run_id,omitempty"`
+	TotalReposCount      int32                  `protobuf:"varint,19,opt,name=total_repos_count,json=totalReposCount,proto3" json:"total_repos_count,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *Analysis) Reset() {
+	*x = Analysis{}
 	mi := &file_proto_sarifpb_sarif_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Run) String() string {
+func (x *Analysis) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Run) ProtoMessage() {}
+func (*Analysis) ProtoMessage() {}
 
-func (x *Run) ProtoReflect() protoreflect.Message {
+func (x *Analysis) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_sarifpb_sarif_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -118,56 +163,147 @@ func (x *Run) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Run.ProtoReflect.Descriptor instead.
-func (*Run) Descriptor() ([]byte, []int) {
+// Deprecated: Use Analysis.ProtoReflect.Descriptor instead.
+func (*Analysis) Descriptor() ([]byte, []int) {
 	return file_proto_sarifpb_sarif_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Run) GetRunId() int32 {
+func (x *Analysis) GetRowId() int32 {
 	if x != nil {
-		return x.RunId
+		return x.RowId
 	}
 	return 0
 }
 
-func (x *Run) GetToolName() string {
+func (x *Analysis) GetToolName() string {
 	if x != nil {
 		return x.ToolName
 	}
 	return ""
 }
 
-func (x *Run) GetToolVersion() string {
+func (x *Analysis) GetToolVersion() string {
 	if x != nil && x.ToolVersion != nil {
 		return *x.ToolVersion
 	}
 	return ""
 }
 
-func (x *Run) GetAnalysisId() string {
+func (x *Analysis) GetAnalysisId() string {
 	if x != nil {
 		return x.AnalysisId
 	}
 	return ""
 }
 
-func (x *Run) GetControllerRepo() string {
+func (x *Analysis) GetControllerRepo() string {
 	if x != nil && x.ControllerRepo != nil {
 		return *x.ControllerRepo
 	}
 	return ""
 }
 
-func (x *Run) GetDate() string {
+func (x *Analysis) GetDate() string {
 	if x != nil && x.Date != nil {
 		return *x.Date
 	}
 	return ""
 }
 
+func (x *Analysis) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Analysis) GetQueryLanguage() string {
+	if x != nil {
+		return x.QueryLanguage
+	}
+	return ""
+}
+
+func (x *Analysis) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *Analysis) GetCompletedAt() string {
+	if x != nil && x.CompletedAt != nil {
+		return *x.CompletedAt
+	}
+	return ""
+}
+
+func (x *Analysis) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Analysis) GetFailureReason() string {
+	if x != nil && x.FailureReason != nil {
+		return *x.FailureReason
+	}
+	return ""
+}
+
+func (x *Analysis) GetScannedReposCount() int32 {
+	if x != nil {
+		return x.ScannedReposCount
+	}
+	return 0
+}
+
+func (x *Analysis) GetSkippedReposCount() int32 {
+	if x != nil {
+		return x.SkippedReposCount
+	}
+	return 0
+}
+
+func (x *Analysis) GetNotFoundReposCount() int32 {
+	if x != nil {
+		return x.NotFoundReposCount
+	}
+	return 0
+}
+
+func (x *Analysis) GetNoCodeqlDbReposCount() int32 {
+	if x != nil {
+		return x.NoCodeqlDbReposCount
+	}
+	return 0
+}
+
+func (x *Analysis) GetOverLimitReposCount() int32 {
+	if x != nil {
+		return x.OverLimitReposCount
+	}
+	return 0
+}
+
+func (x *Analysis) GetActionsWorkflowRunId() int32 {
+	if x != nil {
+		return x.ActionsWorkflowRunId
+	}
+	return 0
+}
+
+func (x *Analysis) GetTotalReposCount() int32 {
+	if x != nil {
+		return x.TotalReposCount
+	}
+	return 0
+}
+
 type Rule struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	RuleId          int32                  `protobuf:"varint,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	RowId           int32                  `protobuf:"varint,1,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
 	Id              string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	RuleName        string                 `protobuf:"bytes,3,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
 	RuleDescription *string                `protobuf:"bytes,4,opt,name=rule_description,json=ruleDescription,proto3,oneof" json:"rule_description,omitempty"`
@@ -208,9 +344,9 @@ func (*Rule) Descriptor() ([]byte, []int) {
 	return file_proto_sarifpb_sarif_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Rule) GetRuleId() int32 {
+func (x *Rule) GetRowId() int32 {
 	if x != nil {
-		return x.RuleId
+		return x.RowId
 	}
 	return 0
 }
@@ -259,7 +395,7 @@ func (x *Rule) GetSeverityLevel() string {
 
 type Alert struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	AlertId            int32                  `protobuf:"varint,1,opt,name=alert_id,json=alertId,proto3" json:"alert_id,omitempty"`
+	RowId              int32                  `protobuf:"varint,1,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
 	FilePath           string                 `protobuf:"bytes,2,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
 	StartLine          *int32                 `protobuf:"varint,3,opt,name=start_line,json=startLine,proto3,oneof" json:"start_line,omitempty"`
 	StartColumn        *int32                 `protobuf:"varint,4,opt,name=start_column,json=startColumn,proto3,oneof" json:"start_column,omitempty"`
@@ -272,9 +408,9 @@ type Alert struct {
 	Message            string                 `protobuf:"bytes,11,opt,name=message,proto3" json:"message,omitempty"`
 	ResultFingerprint  *string                `protobuf:"bytes,12,opt,name=result_fingerprint,json=resultFingerprint,proto3,oneof" json:"result_fingerprint,omitempty"`
 	StepCount          *int32                 `protobuf:"varint,13,opt,name=step_count,json=stepCount,proto3,oneof" json:"step_count,omitempty"`
-	RepositoryId       int32                  `protobuf:"varint,14,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
-	AnalysisId         int32                  `protobuf:"varint,15,opt,name=analysis_id,json=analysisId,proto3" json:"analysis_id,omitempty"`
-	RuleId             int32                  `protobuf:"varint,16,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	RepositoryRowId    int32                  `protobuf:"varint,14,opt,name=repository_row_id,json=repositoryRowId,proto3" json:"repository_row_id,omitempty"`
+	AnalysisRowId      int32                  `protobuf:"varint,15,opt,name=analysis_row_id,json=analysisRowId,proto3" json:"analysis_row_id,omitempty"`
+	RuleRowId          int32                  `protobuf:"varint,16,opt,name=rule_row_id,json=ruleRowId,proto3" json:"rule_row_id,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -309,9 +445,9 @@ func (*Alert) Descriptor() ([]byte, []int) {
 	return file_proto_sarifpb_sarif_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Alert) GetAlertId() int32 {
+func (x *Alert) GetRowId() int32 {
 	if x != nil {
-		return x.AlertId
+		return x.RowId
 	}
 	return 0
 }
@@ -400,23 +536,23 @@ func (x *Alert) GetStepCount() int32 {
 	return 0
 }
 
-func (x *Alert) GetRepositoryId() int32 {
+func (x *Alert) GetRepositoryRowId() int32 {
 	if x != nil {
-		return x.RepositoryId
+		return x.RepositoryRowId
 	}
 	return 0
 }
 
-func (x *Alert) GetAnalysisId() int32 {
+func (x *Alert) GetAnalysisRowId() int32 {
 	if x != nil {
-		return x.AnalysisId
+		return x.AnalysisRowId
 	}
 	return 0
 }
 
-func (x *Alert) GetRuleId() int32 {
+func (x *Alert) GetRuleRowId() int32 {
 	if x != nil {
-		return x.RuleId
+		return x.RuleRowId
 	}
 	return 0
 }
@@ -466,27 +602,27 @@ func (x *RepositoryList) GetRepositories() []*Repository {
 	return nil
 }
 
-type RunList struct {
+type AnalysisList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Runs          []*Run                 `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	Analyses      []*Analysis            `protobuf:"bytes,1,rep,name=analyses,proto3" json:"analyses,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RunList) Reset() {
-	*x = RunList{}
+func (x *AnalysisList) Reset() {
+	*x = AnalysisList{}
 	mi := &file_proto_sarifpb_sarif_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RunList) String() string {
+func (x *AnalysisList) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RunList) ProtoMessage() {}
+func (*AnalysisList) ProtoMessage() {}
 
-func (x *RunList) ProtoReflect() protoreflect.Message {
+func (x *AnalysisList) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_sarifpb_sarif_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -498,14 +634,14 @@ func (x *RunList) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RunList.ProtoReflect.Descriptor instead.
-func (*RunList) Descriptor() ([]byte, []int) {
+// Deprecated: Use AnalysisList.ProtoReflect.Descriptor instead.
+func (*AnalysisList) Descriptor() ([]byte, []int) {
 	return file_proto_sarifpb_sarif_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *RunList) GetRuns() []*Run {
+func (x *AnalysisList) GetAnalyses() []*Analysis {
 	if x != nil {
-		return x.Runs
+		return x.Analyses
 	}
 	return nil
 }
@@ -602,25 +738,49 @@ var File_proto_sarifpb_sarif_proto protoreflect.FileDescriptor
 
 const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\n" +
-	"\x19proto/sarifpb/sarif.proto\x12\x05sarif\"\x81\x01\n" +
+	"\x19proto/sarifpb/sarif.proto\x12\x05sarif\"\xd4\x02\n" +
 	"\n" +
-	"Repository\x12#\n" +
-	"\rrepository_id\x18\x01 \x01(\x05R\frepositoryId\x12'\n" +
-	"\x0frepository_name\x18\x02 \x01(\tR\x0erepositoryName\x12%\n" +
-	"\x0erepository_url\x18\x03 \x01(\tR\rrepositoryUrl\"\xf7\x01\n" +
-	"\x03Run\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\x05R\x05runId\x12\x1b\n" +
+	"Repository\x12\x15\n" +
+	"\x06row_id\x18\x01 \x01(\x05R\x05rowId\x120\n" +
+	"\x14repository_full_name\x18\x02 \x01(\tR\x12repositoryFullName\x12%\n" +
+	"\x0erepository_url\x18\x03 \x01(\tR\rrepositoryUrl\x12'\n" +
+	"\x0fanalysis_status\x18\x04 \x01(\tR\x0eanalysisStatus\x12&\n" +
+	"\fresult_count\x18\x05 \x01(\x05H\x00R\vresultCount\x88\x01\x01\x128\n" +
+	"\x16artifact_size_in_bytes\x18\x06 \x01(\x05H\x01R\x13artifactSizeInBytes\x88\x01\x01\x12\x1f\n" +
+	"\vanalysis_id\x18\a \x01(\tR\n" +
+	"analysisIdB\x0f\n" +
+	"\r_result_countB\x19\n" +
+	"\x17_artifact_size_in_bytes\"\xcb\x06\n" +
+	"\bAnalysis\x12\x15\n" +
+	"\x06row_id\x18\x01 \x01(\x05R\x05rowId\x12\x1b\n" +
 	"\ttool_name\x18\x02 \x01(\tR\btoolName\x12&\n" +
 	"\ftool_version\x18\x03 \x01(\tH\x00R\vtoolVersion\x88\x01\x01\x12\x1f\n" +
 	"\vanalysis_id\x18\x04 \x01(\tR\n" +
 	"analysisId\x12,\n" +
 	"\x0fcontroller_repo\x18\x05 \x01(\tH\x01R\x0econtrollerRepo\x88\x01\x01\x12\x17\n" +
-	"\x04date\x18\x06 \x01(\tH\x02R\x04date\x88\x01\x01B\x0f\n" +
+	"\x04date\x18\x06 \x01(\tH\x02R\x04date\x88\x01\x01\x12\x14\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x12%\n" +
+	"\x0equery_language\x18\b \x01(\tR\rqueryLanguage\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\t \x01(\tR\tcreatedAt\x12&\n" +
+	"\fcompleted_at\x18\n" +
+	" \x01(\tH\x03R\vcompletedAt\x88\x01\x01\x12\x16\n" +
+	"\x06status\x18\v \x01(\tR\x06status\x12*\n" +
+	"\x0efailure_reason\x18\f \x01(\tH\x04R\rfailureReason\x88\x01\x01\x12.\n" +
+	"\x13scanned_repos_count\x18\r \x01(\x05R\x11scannedReposCount\x12.\n" +
+	"\x13skipped_repos_count\x18\x0e \x01(\x05R\x11skippedReposCount\x121\n" +
+	"\x15not_found_repos_count\x18\x0f \x01(\x05R\x12notFoundReposCount\x126\n" +
+	"\x18no_codeql_db_repos_count\x18\x10 \x01(\x05R\x14noCodeqlDbReposCount\x123\n" +
+	"\x16over_limit_repos_count\x18\x11 \x01(\x05R\x13overLimitReposCount\x125\n" +
+	"\x17actions_workflow_run_id\x18\x12 \x01(\x05R\x14actionsWorkflowRunId\x12*\n" +
+	"\x11total_repos_count\x18\x13 \x01(\x05R\x0ftotalReposCountB\x0f\n" +
 	"\r_tool_versionB\x12\n" +
 	"\x10_controller_repoB\a\n" +
-	"\x05_date\"\x89\x02\n" +
-	"\x04Rule\x12\x17\n" +
-	"\arule_id\x18\x01 \x01(\x05R\x06ruleId\x12\x0e\n" +
+	"\x05_dateB\x0f\n" +
+	"\r_completed_atB\x11\n" +
+	"\x0f_failure_reason\"\x87\x02\n" +
+	"\x04Rule\x12\x15\n" +
+	"\x06row_id\x18\x01 \x01(\x05R\x05rowId\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1b\n" +
 	"\trule_name\x18\x03 \x01(\tR\bruleName\x12.\n" +
 	"\x10rule_description\x18\x04 \x01(\tH\x00R\x0fruleDescription\x88\x01\x01\x12#\n" +
@@ -628,9 +788,9 @@ const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\x04kind\x18\x06 \x01(\tR\x04kind\x12*\n" +
 	"\x0eseverity_level\x18\a \x01(\tH\x01R\rseverityLevel\x88\x01\x01B\x13\n" +
 	"\x11_rule_descriptionB\x11\n" +
-	"\x0f_severity_level\"\x9f\x06\n" +
-	"\x05Alert\x12\x19\n" +
-	"\balert_id\x18\x01 \x01(\x05R\aalertId\x12\x1b\n" +
+	"\x0f_severity_level\"\xb0\x06\n" +
+	"\x05Alert\x12\x15\n" +
+	"\x06row_id\x18\x01 \x01(\x05R\x05rowId\x12\x1b\n" +
 	"\tfile_path\x18\x02 \x01(\tR\bfilePath\x12\"\n" +
 	"\n" +
 	"start_line\x18\x03 \x01(\x05H\x00R\tstartLine\x88\x01\x01\x12&\n" +
@@ -646,11 +806,10 @@ const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\amessage\x18\v \x01(\tR\amessage\x122\n" +
 	"\x12result_fingerprint\x18\f \x01(\tH\bR\x11resultFingerprint\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"step_count\x18\r \x01(\x05H\tR\tstepCount\x88\x01\x01\x12#\n" +
-	"\rrepository_id\x18\x0e \x01(\x05R\frepositoryId\x12\x1f\n" +
-	"\vanalysis_id\x18\x0f \x01(\x05R\n" +
-	"analysisId\x12\x17\n" +
-	"\arule_id\x18\x10 \x01(\x05R\x06ruleIdB\r\n" +
+	"step_count\x18\r \x01(\x05H\tR\tstepCount\x88\x01\x01\x12*\n" +
+	"\x11repository_row_id\x18\x0e \x01(\x05R\x0frepositoryRowId\x12&\n" +
+	"\x0fanalysis_row_id\x18\x0f \x01(\x05R\ranalysisRowId\x12\x1e\n" +
+	"\vrule_row_id\x18\x10 \x01(\x05R\truleRowIdB\r\n" +
 	"\v_start_lineB\x0f\n" +
 	"\r_start_columnB\v\n" +
 	"\t_end_lineB\r\n" +
@@ -662,14 +821,13 @@ const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\x13_result_fingerprintB\r\n" +
 	"\v_step_count\"G\n" +
 	"\x0eRepositoryList\x125\n" +
-	"\frepositories\x18\x01 \x03(\v2\x11.sarif.RepositoryR\frepositories\")\n" +
-	"\aRunList\x12\x1e\n" +
-	"\x04runs\x18\x01 \x03(\v2\n" +
-	".sarif.RunR\x04runs\"-\n" +
+	"\frepositories\x18\x01 \x03(\v2\x11.sarif.RepositoryR\frepositories\";\n" +
+	"\fAnalysisList\x12+\n" +
+	"\banalyses\x18\x01 \x03(\v2\x0f.sarif.AnalysisR\banalyses\"-\n" +
 	"\bRuleList\x12!\n" +
 	"\x05rules\x18\x01 \x03(\v2\v.sarif.RuleR\x05rules\"1\n" +
 	"\tAlertList\x12$\n" +
-	"\x06alerts\x18\x01 \x03(\v2\f.sarif.AlertR\x06alertsB7Z5github.com/ghas-projects/sarif-protobuf/proto/sarifpbb\x06proto3"
+	"\x06alerts\x18\x01 \x03(\v2\f.sarif.AlertR\x06alertsBRZ5github.com/ghas-projects/sarif-protobuf/proto/sarifpb\xaa\x02\x18MRVA.Reports.Data.Modelsb\x06proto3"
 
 var (
 	file_proto_sarifpb_sarif_proto_rawDescOnce sync.Once
@@ -686,17 +844,17 @@ func file_proto_sarifpb_sarif_proto_rawDescGZIP() []byte {
 var file_proto_sarifpb_sarif_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_sarifpb_sarif_proto_goTypes = []any{
 	(*Repository)(nil),     // 0: sarif.Repository
-	(*Run)(nil),            // 1: sarif.Run
+	(*Analysis)(nil),       // 1: sarif.Analysis
 	(*Rule)(nil),           // 2: sarif.Rule
 	(*Alert)(nil),          // 3: sarif.Alert
 	(*RepositoryList)(nil), // 4: sarif.RepositoryList
-	(*RunList)(nil),        // 5: sarif.RunList
+	(*AnalysisList)(nil),   // 5: sarif.AnalysisList
 	(*RuleList)(nil),       // 6: sarif.RuleList
 	(*AlertList)(nil),      // 7: sarif.AlertList
 }
 var file_proto_sarifpb_sarif_proto_depIdxs = []int32{
 	0, // 0: sarif.RepositoryList.repositories:type_name -> sarif.Repository
-	1, // 1: sarif.RunList.runs:type_name -> sarif.Run
+	1, // 1: sarif.AnalysisList.analyses:type_name -> sarif.Analysis
 	2, // 2: sarif.RuleList.rules:type_name -> sarif.Rule
 	3, // 3: sarif.AlertList.alerts:type_name -> sarif.Alert
 	4, // [4:4] is the sub-list for method output_type
@@ -711,6 +869,7 @@ func file_proto_sarifpb_sarif_proto_init() {
 	if File_proto_sarifpb_sarif_proto != nil {
 		return
 	}
+	file_proto_sarifpb_sarif_proto_msgTypes[0].OneofWrappers = []any{}
 	file_proto_sarifpb_sarif_proto_msgTypes[1].OneofWrappers = []any{}
 	file_proto_sarifpb_sarif_proto_msgTypes[2].OneofWrappers = []any{}
 	file_proto_sarifpb_sarif_proto_msgTypes[3].OneofWrappers = []any{}

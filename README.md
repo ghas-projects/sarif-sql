@@ -148,19 +148,6 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 - Code scanning alerts: Read and write
 - Contents: Read-only
 
-## Architecture
-
-### Key Design Features
-
-1. **Structured SARIF Parsing**: Uses strongly-typed Go structs instead of generic maps for 40-60% faster JSON unmarshaling
-
-2. **HTTP Client Reuse**: Single HTTP client per service with connection pooling for improved performance
-
-3. **Concurrent Processing**: Worker pool pattern with optimal goroutine count based on CPU cores and task count
-
-4. **Dynamic Memory Pre-allocation**: String builders pre-allocate based on expected output size to reduce GC pressure
-
-5. **Graceful Cancellation**: Context-based cancellation propagates through all operations for clean shutdown
 
 ### Project Structure
 
@@ -185,20 +172,6 @@ sarif-protobuf/
 ├── util/                 # Utilities (logging, workers)
 └── main.go
 ```
-
-## Performance Optimizations
-
-This tool is optimized for processing large-scale MRVA analyses:
-
-- **Concurrent Processing**: Processes multiple SARIF files simultaneously
-- **Connection Pooling**: Reuses HTTP connections across API calls
-- **Efficient Memory Use**: Pre-allocated buffers and structured parsing
-- **Batch Operations**: Reduces lock contention with batch writes
-
-**Benchmarks** (10 SARIF files, ~16MB total):
-- Parsing: ~60-70ms
-- Transformation: ~100ms total
-- Report generation: ~20-30ms
 
 ## Logging
 

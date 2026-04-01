@@ -33,7 +33,4 @@ var AnalysisStartCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	AnalysisStartCmd.Flags().StringVar(&reposFile, "repos-file", "", "Path to repository list file (TOML or JSON)")
-	AnalysisStartCmd.Flags().StringVar(&repos, "repos", "", "Comma-separated list of repositories (owner/repo)")
-}
+

@@ -2,8 +2,10 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -88,7 +90,15 @@ func NewCustomRoundTripper(opts Options) *CustomRoundTripper {
 	}
 }
 
-// RoundTrip implements the http.RoundTripper interface.
+const (
+	maxRetries          = 3
+	rateLimitBuffer     = 5 // start slowing down when remaining hits this threshold
+	defaultRetrySeconds = 60
+)
+
+// RoundTrip implements the http.RoundTripper interface with GitHub rate limit handling.
+// It automatically retries on 429 (rate limit) and 403 (secondary rate limit) responses,
+// and proactively pauses when X-RateLimit-Remaining is low.
 func (c *CustomRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 
@@ -117,20 +127,67 @@ func (c *CustomRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		slog.String("url", req2.URL.String()),
 	)
 
-	// Perform the actual request
-	resp, err := c.base.RoundTrip(req2)
-	duration := time.Since(start)
+	var resp *http.Response
+	var err error
 
-	if err != nil {
-		c.logger.Error("HTTP Error",
-			slog.String("method", req2.Method),
-			slog.String("url", req2.URL.String()),
-			slog.Any("error", err),
-			slog.Duration("took", duration),
-		)
-		return nil, err
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Re-clone for retry since body may have been consumed
+			req2 = req.Clone(req.Context())
+			for k, v := range c.staticHeaders {
+				req2.Header.Set(k, v)
+			}
+			if c.authProvider != nil {
+				val, authErr := c.authProvider(req2)
+				if authErr != nil {
+					return nil, authErr
+				}
+				if val != "" {
+					req2.Header.Set("Authorization", val)
+				}
+			}
+		}
+
+		resp, err = c.base.RoundTrip(req2)
+		if err != nil {
+			c.logger.Error("HTTP Error",
+				slog.String("method", req2.Method),
+				slog.String("url", req2.URL.String()),
+				slog.Any("error", err),
+				slog.Duration("took", time.Since(start)),
+			)
+			return nil, err
+		}
+
+		// Handle rate limiting (429 or 403 with rate limit message)
+		if resp.StatusCode == http.StatusTooManyRequests || (resp.StatusCode == http.StatusForbidden && isSecondaryRateLimit(resp)) {
+			retryAfter := parseRetryAfter(resp)
+			c.logger.Warn("rate limited by GitHub API, waiting before retry",
+				slog.Int("status", resp.StatusCode),
+				slog.Int("attempt", attempt+1),
+				slog.Int("max_retries", maxRetries),
+				slog.Duration("retry_after", retryAfter),
+				slog.String("url", req2.URL.String()),
+			)
+			resp.Body.Close()
+
+			if attempt >= maxRetries {
+				return nil, fmt.Errorf("rate limited after %d retries on %s %s", maxRetries, req2.Method, req2.URL.String())
+			}
+
+			if err := sleepWithContext(req2.Context(), retryAfter); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		// Proactive rate limit check: if remaining is low, pause before next request
+		c.checkRateLimitHeaders(resp)
+
+		break
 	}
 
+	duration := time.Since(start)
 	c.logger.Info("HTTP Response",
 		slog.Int("status", resp.StatusCode),
 		slog.String("method", req2.Method),
@@ -139,6 +196,78 @@ func (c *CustomRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	)
 
 	return resp, nil
+}
+
+// isSecondaryRateLimit checks if a 403 response is a GitHub secondary rate limit
+func isSecondaryRateLimit(resp *http.Response) bool {
+	// GitHub signals secondary rate limits via Retry-After header on 403
+	return resp.Header.Get("Retry-After") != ""
+}
+
+// parseRetryAfter extracts the wait duration from response headers.
+// It checks Retry-After first, then falls back to X-RateLimit-Reset.
+func parseRetryAfter(resp *http.Response) time.Duration {
+	// Check Retry-After header (seconds)
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if seconds, err := strconv.Atoi(ra); err == nil {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+
+	// Check X-RateLimit-Reset (Unix timestamp)
+	if reset := resp.Header.Get("X-RateLimit-Reset"); reset != "" {
+		if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
+			waitDuration := time.Until(time.Unix(ts, 0))
+			if waitDuration > 0 {
+				return waitDuration
+			}
+		}
+	}
+
+	return time.Duration(defaultRetrySeconds) * time.Second
+}
+
+// checkRateLimitHeaders logs and proactively pauses if rate limit remaining is low
+func (c *CustomRoundTripper) checkRateLimitHeaders(resp *http.Response) {
+	remaining := resp.Header.Get("X-RateLimit-Remaining")
+	reset := resp.Header.Get("X-RateLimit-Reset")
+
+	if remaining == "" {
+		return
+	}
+
+	rem, err := strconv.Atoi(remaining)
+	if err != nil {
+		return
+	}
+
+	c.logger.Debug("rate limit status",
+		slog.Int("remaining", rem),
+		slog.String("reset", reset),
+	)
+
+	if rem <= rateLimitBuffer && reset != "" {
+		if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
+			waitDuration := time.Until(time.Unix(ts, 0))
+			if waitDuration > 0 {
+				c.logger.Warn("rate limit nearly exhausted, pausing proactively",
+					slog.Int("remaining", rem),
+					slog.Duration("pause", waitDuration),
+				)
+				time.Sleep(waitDuration)
+			}
+		}
+	}
+}
+
+// sleepWithContext sleeps for the given duration but respects context cancellation
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
 }
 
 // newGithubStyleTransportWithAuth creates a transport that injects GitHub headers and acquires token automatically.

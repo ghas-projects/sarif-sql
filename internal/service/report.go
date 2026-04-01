@@ -11,12 +11,18 @@ import (
 )
 
 // generateMRVAStatusReport creates a markdown report from MRVA status results
-func (s *AnalysisService) generateMRVAStatusReport(results []models.MRVAStatusResponse) error {
+func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryResponse, results []models.MRVAStatusResponse) error {
 	// Group results by status
 	statusGroups := make(map[string][]models.MRVAStatusResponse)
 	for _, result := range results {
 		statusGroups[result.AnalysisStatus] = append(statusGroups[result.AnalysisStatus], result)
 	}
+
+	totalSkipped := summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount
+	totalNotFound := summary.NotFoundRepositories.RepositoryCount
+	totalNoCodeQL := summary.NoCodeQLDBRepositories.RepositoryCount
+	totalOverLimit := summary.OverLimitRepositories.RepositoryCount
+	totalRepos := len(results) + totalSkipped + totalNotFound + totalNoCodeQL + totalOverLimit
 
 	// Build the markdown content
 	var md strings.Builder
@@ -26,7 +32,7 @@ func (s *AnalysisService) generateMRVAStatusReport(results []models.MRVAStatusRe
 	md.WriteString(fmt.Sprintf("**Analysis ID:** `%s`\n\n", s.analysisId))
 	md.WriteString(fmt.Sprintf("**Controller Repository:** `%s`\n\n", s.controllerRepo))
 	md.WriteString(fmt.Sprintf("**Generated:** %s\n\n", time.Now().Format("2006-01-02 15:04:05 MST")))
-	md.WriteString(fmt.Sprintf("**Total Repositories:** %d\n\n", len(results)))
+	md.WriteString(fmt.Sprintf("**Total Repositories:** %d\n\n", totalRepos))
 
 	// Summary section
 	md.WriteString("## Summary\n\n")
@@ -35,6 +41,18 @@ func (s *AnalysisService) generateMRVAStatusReport(results []models.MRVAStatusRe
 
 	for status, repos := range statusGroups {
 		md.WriteString(fmt.Sprintf("| %s | %d |\n", status, len(repos)))
+	}
+	if totalSkipped > 0 {
+		md.WriteString(fmt.Sprintf("| access_mismatch (skipped) | %d |\n", totalSkipped))
+	}
+	if totalNotFound > 0 {
+		md.WriteString(fmt.Sprintf("| not_found | %d |\n", totalNotFound))
+	}
+	if totalNoCodeQL > 0 {
+		md.WriteString(fmt.Sprintf("| no_codeql_db | %d |\n", totalNoCodeQL))
+	}
+	if totalOverLimit > 0 {
+		md.WriteString(fmt.Sprintf("| over_limit | %d |\n", totalOverLimit))
 	}
 	md.WriteString("\n")
 
@@ -104,6 +122,50 @@ func (s *AnalysisService) generateMRVAStatusReport(results []models.MRVAStatusRe
 			}
 			md.WriteString("\n")
 		}
+	}
+
+	// Skipped Repositories (Access Mismatch)
+	if totalSkipped > 0 {
+		md.WriteString(fmt.Sprintf("### Access Mismatch / Skipped (%d)\n\n", totalSkipped))
+		md.WriteString("| Repository |\n")
+		md.WriteString("|------------|\n")
+		for _, repo := range summary.SkippedRepositories.AccessMismatchRepositories.Repositories {
+			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
+		}
+		md.WriteString("\n")
+	}
+
+	// Not Found Repositories
+	if totalNotFound > 0 {
+		md.WriteString(fmt.Sprintf("### Not Found (%d)\n\n", totalNotFound))
+		md.WriteString("| Repository |\n")
+		md.WriteString("|------------|\n")
+		for _, repoName := range summary.NotFoundRepositories.Repositories {
+			md.WriteString(fmt.Sprintf("| `%s` |\n", repoName))
+		}
+		md.WriteString("\n")
+	}
+
+	// No CodeQL Database Repositories
+	if totalNoCodeQL > 0 {
+		md.WriteString(fmt.Sprintf("### No CodeQL Database (%d)\n\n", totalNoCodeQL))
+		md.WriteString("| Repository |\n")
+		md.WriteString("|------------|\n")
+		for _, repo := range summary.NoCodeQLDBRepositories.Repositories {
+			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
+		}
+		md.WriteString("\n")
+	}
+
+	// Over Limit Repositories
+	if totalOverLimit > 0 {
+		md.WriteString(fmt.Sprintf("### Over Limit (%d)\n\n", totalOverLimit))
+		md.WriteString("| Repository |\n")
+		md.WriteString("|------------|\n")
+		for _, repo := range summary.OverLimitRepositories.Repositories {
+			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
+		}
+		md.WriteString("\n")
 	}
 
 	// Save the report

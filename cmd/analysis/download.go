@@ -13,11 +13,12 @@ var (
 var AnalysisDownloadCmd = &cobra.Command{
 	Use:   "download",
 	Short: "Download result artifacts for an analysis",
-	Long: `The download command fetches SARIF result files for completed MRVA
+	Long: `The download command fetches SARIF result files for MRVA
 			analyses and stores them in the corresponding local analysis
 			directories (analysis/{id}/).
 
-			Only available SARIF artifacts will be downloaded.`,
+			Only available SARIF artifacts will be downloaded. 
+			The final report will include details of any failed analyses or missing artifacts.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		node := cmd
 		if node.HasParent() {
@@ -32,7 +33,7 @@ var AnalysisDownloadCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Downloading artifacts...")
-		return analysisService.DownloadAnalysiFiles(cmd.Context(), directory)
+		return analysisService.DownloadAnalysisFiles(cmd.Context(), directory)
 	},
 }
 

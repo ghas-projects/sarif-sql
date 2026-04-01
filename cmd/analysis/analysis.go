@@ -7,14 +7,11 @@ import (
 
 	"github.com/ghas-projects/sarif-protobuf/internal/auth"
 	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/internal/parser"
 	"github.com/ghas-projects/sarif-protobuf/internal/service"
 	"github.com/spf13/cobra"
 )
 
 var (
-	reposFile       string
-	repos           string
 	analysisService *service.AnalysisService
 	appId           string
 	privateKey      string
@@ -87,47 +84,12 @@ status, and download SARIF artifacts into a structured layout.`,
 			"has_app_creds", appId != "",
 			"base_url", baseURL)
 
-		// Validate that either repos or repos-file is provided
-		if repos == "" && reposFile == "" {
-			logger.Error("Either repos or repos-file must be provided.")
-			return fmt.Errorf("either repos or repos-file must be provided")
-		}
-
-		var repositories []models.Repository
-		var err error
-
-		if reposFile != "" {
-			repositories, err = parser.ParseRepositoriesFromFile(reposFile)
-			if err != nil {
-				logger.Error("failed to parse repositories from file",
-					"file", reposFile,
-					"error", err)
-				return fmt.Errorf("failed to parse repositories from file: %w", err)
-			}
-		} else if repos != "" {
-			repositories, err = parser.ParseRepositoriesFromString(repos)
-			if err != nil {
-				logger.Error("failed to parse repositories from string",
-					"error", err)
-				return fmt.Errorf("failed to parse repositories from string: %w", err)
-			}
-		} else {
-			return fmt.Errorf("either --repos-file or --repos must be provided")
-		}
-
-		logger.Info("parsed repositories",
-			"count", len(repositories))
-
-		if baseURL == "" {
-			baseURL = models.DefaultBaseURL
-		}
-
 		// Get analysisId and controllerRepo from parent's persistent flags
 		analysisId, _ := cmd.Flags().GetString("analysis-id")
 		controllerRepo, _ := cmd.Flags().GetString("controller-repo")
 
-		// Initialize the analysis service with all required data
-		analysisService = service.NewAnalysisService(logger, auth.Auth, analysisId, controllerRepo, repositories)
+		// Initialize the analysis service
+		analysisService = service.NewAnalysisService(logger, auth.Auth, analysisId, controllerRepo)
 
 		return nil
 	},
@@ -142,8 +104,6 @@ func init() {
 	// PAT authentication flag
 	AnalysisCmd.PersistentFlags().StringVar(&token, "token", "", "GitHub Personal Access Token (required if not using GitHub App authentication)")
 
-	AnalysisCmd.PersistentFlags().StringVar(&reposFile, "repos-file", "", "Path to a file containing a list of repositories to analyze")
-	AnalysisCmd.PersistentFlags().StringVar(&repos, "repos", "", "Comma-separated list of repositories to analyze in owner/name format")
 	AnalysisCmd.PersistentFlags().StringVar(&baseURL, "base-url", "", "GitHub API base URL")
 
 	AnalysisCmd.AddCommand(AnalysisStartCmd)

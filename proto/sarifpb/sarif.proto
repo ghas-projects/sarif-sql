@@ -2,25 +2,43 @@ syntax = "proto3";
 
 package sarif;
 
+option csharp_namespace = "MRVA.Reports.Data.Models";
 option go_package = "github.com/ghas-projects/sarif-protobuf/proto/sarifpb";
 
 message Repository {
-  int32 repository_id = 1;
-  string repository_name = 2;
+  int32 row_id = 1;
+  string repository_full_name = 2;
   string repository_url = 3;
+  string analysis_status = 4;
+  optional int32  result_count = 5;
+  optional int32 artifact_size_in_bytes = 6;
+  string analysis_id = 7;
 }
 
-message Run {
-  int32 run_id = 1;
+message Analysis {
+  int32 row_id = 1;
   string tool_name = 2;
   optional string tool_version = 3;
   string analysis_id = 4;
   optional string controller_repo = 5;
   optional string date = 6;
+  string state = 7;
+  string query_language = 8;
+  string created_at = 9;
+  optional string completed_at = 10;
+  string status = 11;
+  optional string failure_reason = 12;
+  int32 scanned_repos_count = 13; 
+  int32 skipped_repos_count = 14;
+  int32 not_found_repos_count = 15;
+  int32 no_codeql_db_repos_count = 16;
+  int32 over_limit_repos_count = 17; 
+  int32 actions_workflow_run_id = 18;
+  int32 total_repos_count = 19;
 }
 
 message Rule {
-  int32 rule_id = 1;
+  int32 row_id = 1;
   string id = 2;
   string rule_name = 3;
   optional string rule_description = 4;
@@ -30,7 +48,7 @@ message Rule {
 }
 
 message Alert {
-  int32 alert_id = 1;
+  int32 row_id = 1;
   string file_path = 2;
   optional int32 start_line = 3;
   optional int32 start_column = 4;
@@ -43,9 +61,9 @@ message Alert {
   string message = 11;
   optional string result_fingerprint = 12;
   optional int32 step_count = 13;
-  int32 repository_id = 14;
-  int32 analysis_id = 15;
-  int32 rule_id = 16;
+  int32 repository_row_id = 14;
+  int32 analysis_row_id = 15;
+  int32 rule_row_id = 16;
 }
 
 // Wrapper messages for serializing collections
@@ -53,8 +71,8 @@ message RepositoryList {
   repeated Repository repositories = 1;
 }
 
-message RunList {
-  repeated Run runs = 1;
+message AnalysisList {
+  repeated Analysis analyses = 1;
 }
 
 message RuleList {

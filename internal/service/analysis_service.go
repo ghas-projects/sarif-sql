@@ -3,6 +3,7 @@ package service
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,17 +24,15 @@ type AnalysisService struct {
 	githubClient   *github.Client
 	analysisId     string
 	controllerRepo string
-	repositories   []models.Repository
 }
 
 // NewAnalysisService creates a new AnalysisService instance
-func NewAnalysisService(logger *slog.Logger, auth *auth.AuthConfig, analysisId string, controllerRepo string, repositories []models.Repository) *AnalysisService {
+func NewAnalysisService(logger *slog.Logger, auth *auth.AuthConfig, analysisId string, controllerRepo string) *AnalysisService {
 	return &AnalysisService{
 		logger:         logger,
 		githubClient:   github.NewClient(auth, logger),
 		analysisId:     analysisId,
 		controllerRepo: controllerRepo,
-		repositories:   repositories,
 	}
 }
 
@@ -61,16 +60,17 @@ func extractSarifFromZip(zipPath string, outputDir string, repo string, controll
 			if err != nil {
 				return "", fmt.Errorf("failed to open file %s in zip: %w", file.Name, err)
 			}
-			defer rc.Close()
 
 			outFile, err := os.Create(sarifPath)
 			if err != nil {
+				rc.Close()
 				return "", fmt.Errorf("failed to create output file %s: %w", sarifPath, err)
 			}
-			defer outFile.Close()
 
 			// Copy the content
 			written, err := io.Copy(outFile, rc)
+			outFile.Close()
+			rc.Close()
 			if err != nil {
 				return "", fmt.Errorf("failed to extract SARIF file: %w", err)
 			}
@@ -97,64 +97,85 @@ func extractSarifFromZip(zipPath string, outputDir string, repo string, controll
 	return "", fmt.Errorf("no .sarif file found in zip archive %s", zipPath)
 }
 
-func processRepositoryAnalysis(ctx context.Context, workerId int, repoChan chan string, resultChan chan models.MRVAStatusResponse, outputDir string, analysisId string, controllerRepo string, githubClient *github.Client, logger *slog.Logger) error {
-	logger.Info("Worker started for MRVA status check", slog.Int("workerId", workerId))
+func processRepositoryDownload(ctx context.Context, workerId int, repoChan chan models.ScannedRepository, resultChan chan models.MRVAStatusResponse, outputDir string, analysisId string, controllerRepo string, githubClient *github.Client, logger *slog.Logger) {
+	logger.Info("Worker started for artifact download", slog.Int("workerId", workerId))
 
-	for repo := range repoChan {
-		select {
-		case <-ctx.Done():
+	for scanned := range repoChan {
+		if ctx.Err() != nil {
 			logger.Info("Worker exiting due to context cancellation", slog.Int("workerId", workerId))
-			return ctx.Err()
-		default:
-			statusResponse, err := githubClient.FetchMRVAStatus(ctx, repo, analysisId, controllerRepo)
-			if err != nil {
-				logger.Error("Failed to fetch MRVA status",
-					slog.String("repo", repo),
-					slog.Any("error", err))
-				continue
-			}
-
-			if statusResponse.AnalysisStatus == "succeeded" {
-				logger.Info("MRVA analysis succeeded, artifact is ready for download",
-					"repository", repo)
-				// Download SARIF file
-				artifactPath, err := githubClient.DownloadArtifactFile(ctx, repo, statusResponse.ArtifactURL, outputDir)
-				if err != nil {
-					logger.Error("Failed to download artifact.",
-						slog.String("repo", repo),
-						slog.Any("error", err))
-				} else {
-					logger.Info("Artifact downloaded",
-						"repository", repo,
-						"path", artifactPath)
-				}
-
-				statusResponse.SarifFilePath = artifactPath
-
-				// Extract SARIF file from zip artifact
-				sarifPath, err := extractSarifFromZip(artifactPath, outputDir, repo, controllerRepo, logger)
-				if err != nil {
-					logger.Error("Failed to extract SARIF file from artifact",
-						slog.String("repo", repo),
-						slog.String("artifact_path", artifactPath),
-						slog.Any("error", err))
-				} else {
-					logger.Info("SARIF file extracted successfully",
-						"repository", repo,
-						"sarif_path", sarifPath)
-					statusResponse.SarifFilePath = sarifPath
-				}
-			}
-
-			logger.Info("Successfully retrieved MRVA status",
-				"repository", repo,
-				"analysis_status", statusResponse.AnalysisStatus)
-			resultChan <- *statusResponse
+			return
 		}
-		logger.Info("Worker completed MRVA status check", slog.Int("workerId", workerId))
+
+		repo := scanned.Repository.FullName
+
+		// Skip repos that didn't succeed — no artifact to download
+		if scanned.AnalysisStatus != "succeeded" {
+			logger.Info("Skipping repository, analysis did not succeed",
+				"repository", repo,
+				"analysis_status", scanned.AnalysisStatus)
+			resultChan <- models.MRVAStatusResponse{
+				Repository:        scanned.Repository,
+				AnalysisStatus:    scanned.AnalysisStatus,
+				ArtifactSizeBytes: scanned.ArtifactSizeBytes,
+				ResultCount:       scanned.ResultCount,
+			}
+			continue
+		}
+
+		// Fetch per-repo status to get artifact_url
+		statusResponse, err := githubClient.FetchMRVAStatus(ctx, repo, analysisId, controllerRepo)
+		if err != nil {
+			logger.Error("Failed to fetch MRVA status",
+				slog.String("repo", repo),
+				slog.Any("error", err))
+			resultChan <- models.MRVAStatusResponse{
+				Repository:     scanned.Repository,
+				AnalysisStatus: scanned.AnalysisStatus,
+			}
+			continue
+		}
+
+		if statusResponse.ArtifactURL == "" {
+			logger.Warn("No artifact URL available for repository",
+				"repository", repo)
+			resultChan <- *statusResponse
+			continue
+		}
+
+		logger.Info("MRVA analysis succeeded, downloading artifact",
+			"repository", repo)
+
+		artifactPath, err := githubClient.DownloadArtifactFile(ctx, repo, statusResponse.ArtifactURL, outputDir)
+		if err != nil {
+			logger.Error("Failed to download artifact",
+				slog.String("repo", repo),
+				slog.Any("error", err))
+		} else {
+			logger.Info("Artifact downloaded",
+				"repository", repo,
+				"path", artifactPath)
+
+			sarifPath, err := extractSarifFromZip(artifactPath, outputDir, repo, controllerRepo, logger)
+			if err != nil {
+				logger.Error("Failed to extract SARIF file from artifact",
+					slog.String("repo", repo),
+					slog.String("artifact_path", artifactPath),
+					slog.Any("error", err))
+			} else {
+				logger.Info("SARIF file extracted successfully",
+					"repository", repo,
+					"sarif_path", sarifPath)
+				statusResponse.SarifFilePath = sarifPath
+			}
+		}
+
+		logger.Info("Repository download processed",
+			"repository", repo,
+			"analysis_status", statusResponse.AnalysisStatus)
+		resultChan <- *statusResponse
 	}
 
-	return nil
+	logger.Info("Worker completed artifact downloads", slog.Int("workerId", workerId))
 }
 
 // createAnalysisDirectory creates a directory structure for the analysis
@@ -194,6 +215,7 @@ func (s *AnalysisService) createAnalysisDirectory(ctx context.Context) error {
 
 // StartAnalysis initializes an analysis for the repositories
 func (s *AnalysisService) StartAnalysis(ctx context.Context) error {
+
 	// Create the main analysis directory with format: analysisId-controllerRepo
 	if err := s.createAnalysisDirectory(ctx); err != nil {
 		return err
@@ -201,25 +223,53 @@ func (s *AnalysisService) StartAnalysis(ctx context.Context) error {
 
 	s.logger.Info("analysis started successfully",
 		"analysis_id", s.analysisId,
-		"controller_repo", s.controllerRepo,
-		"repository_count", len(s.repositories))
+		"controller_repo", s.controllerRepo)
 
 	return nil
 }
 
-func (s *AnalysisService) DownloadAnalysiFiles(ctx context.Context, outputDir string) error {
+func (s *AnalysisService) DownloadAnalysisFiles(ctx context.Context, outputDir string) error {
+	// Fetch repository list from the variant analysis summary API
+	summary, err := s.githubClient.FetchMRVASummary(ctx, s.analysisId, s.controllerRepo)
+	if err != nil {
+		s.logger.Error("failed to fetch analysis summary",
+			"analysis_id", s.analysisId,
+			"controller_repo", s.controllerRepo,
+			"error", err)
+		return fmt.Errorf("failed to fetch analysis summary: %w", err)
+	}
 
-	// Calculate optimal number of workers for concurrent status checks
-	workers := util.CalculateOptimalWorkers(len(s.repositories))
+	var scannedRepositories []models.Repository
+	for _, scanned := range summary.ScannedRepositories {
+		scannedRepositories = append(scannedRepositories, scanned.Repository)
+	}
+
+	s.logger.Info("successfully scanned repositories fetched from analysis summary",
+		"count", len(scannedRepositories))
+
+	// Write analysis.json mapping summary data to the Analysis proto model
+	if err := s.writeAnalysisJSON(summary, outputDir); err != nil {
+		s.logger.Error("failed to write analysis.json", "error", err)
+		return fmt.Errorf("failed to write analysis.json: %w", err)
+	}
+
+	// Write repos.json file containing all repositories in the analysis
+	if err := s.writeReposJSON(summary, outputDir); err != nil {
+		s.logger.Error("failed to write repos.json", "error", err)
+		return fmt.Errorf("failed to write repos.json: %w", err)
+	}
+
+	// Calculate optimal number of workers for concurrent downloads
+	workers := util.CalculateOptimalWorkers(len(scannedRepositories))
 
 	s.logger.Info("starting sarif files download",
 		"analysis_id", s.analysisId,
 		"controller_repo", s.controllerRepo,
-		"repository_count", len(s.repositories),
+		"repository_count", len(scannedRepositories),
 		"workers", workers)
 
-	repoChan := make(chan string, len(s.repositories))
-	resultsChan := make(chan models.MRVAStatusResponse, len(s.repositories))
+	repoChan := make(chan models.ScannedRepository, len(scannedRepositories))
+	resultsChan := make(chan models.MRVAStatusResponse, len(scannedRepositories))
 
 	var wg sync.WaitGroup
 
@@ -230,12 +280,12 @@ func (s *AnalysisService) DownloadAnalysiFiles(ctx context.Context, outputDir st
 		wg.Add(1)
 		go func(workerId int) {
 			defer wg.Done()
-			processRepositoryAnalysis(ctx, workerId, repoChan, resultsChan, outputDir, s.analysisId, s.controllerRepo, s.githubClient, s.logger)
+			processRepositoryDownload(ctx, workerId, repoChan, resultsChan, outputDir, s.analysisId, s.controllerRepo, s.githubClient, s.logger)
 		}(i)
 	}
 
-	for _, repo := range s.repositories {
-		repoChan <- repo.FullName
+	for _, scanned := range summary.ScannedRepositories {
+		repoChan <- scanned
 	}
 	close(repoChan)
 
@@ -259,7 +309,7 @@ func (s *AnalysisService) DownloadAnalysiFiles(ctx context.Context, outputDir st
 				s.logger.Info("status check completed",
 					"total_results", len(results))
 
-				if err := s.generateMRVAStatusReport(results); err != nil {
+				if err := s.generateMRVAStatusReport(summary, results); err != nil {
 					s.logger.Error("failed to generate status report", "error", err)
 					return err
 				}
@@ -268,6 +318,42 @@ func (s *AnalysisService) DownloadAnalysiFiles(ctx context.Context, outputDir st
 			results = append(results, result)
 		}
 	}
+}
+
+// writeAnalysisJSON creates an analysis.json file from the summary response
+func (s *AnalysisService) writeAnalysisJSON(summary *models.MRVASummaryResponse, outputDir string) error {
+	analysis := summary.ToAnalysisRecord(s.analysisId, s.controllerRepo)
+
+	data, err := json.MarshalIndent(analysis, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal analysis JSON: %w", err)
+	}
+
+	filePath := filepath.Join(outputDir, "analysis.json")
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write analysis.json: %w", err)
+	}
+
+	s.logger.Info("analysis.json written successfully", "path", filePath)
+	return nil
+}
+
+// writeReposJSON creates a repos.json file from all repositories in the summary
+func (s *AnalysisService) writeReposJSON(summary *models.MRVASummaryResponse, outputDir string) error {
+	records := models.ToRepositoryRecords(*summary, s.analysisId)
+
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal repos JSON: %w", err)
+	}
+
+	filePath := filepath.Join(outputDir, "repos.json")
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write repos.json: %w", err)
+	}
+
+	s.logger.Info("repos.json written successfully", "path", filePath)
+	return nil
 }
 
 func (s *AnalysisService) GetAnalysisSummary(ctx context.Context) error {

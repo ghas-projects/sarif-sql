@@ -7,11 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/ghas-projects/sarif-protobuf/internal/models"
 	pb "github.com/ghas-projects/sarif-protobuf/proto/sarifpb"
@@ -24,8 +22,7 @@ type ResultCollector struct {
 	alertsMu sync.Mutex
 	Alerts   []*pb.Alert
 
-	runOnce sync.Once // Ensures run is only set once
-	Runs    *pb.Run
+	Analysis *pb.Analysis
 
 	reposMu      sync.RWMutex
 	Repositories map[string]*pb.Repository
@@ -34,9 +31,8 @@ type ResultCollector struct {
 	Rules   map[string]*pb.Rule
 
 	// Atomic counters for unique ID generation across goroutines
-	alertCounter      int64
-	ruleCounter       int64
-	repositoryCounter int64
+	alertCounter int64
+	ruleCounter  int64
 }
 
 // NewResultCollector creates a new ResultCollector instance
@@ -45,7 +41,7 @@ func NewResultCollector() *ResultCollector {
 		Repositories: make(map[string]*pb.Repository),
 		Rules:        make(map[string]*pb.Rule),
 		Alerts:       make([]*pb.Alert, 0),
-		Runs:         &pb.Run{},
+		Analysis:     &pb.Analysis{},
 	}
 }
 
@@ -54,35 +50,6 @@ func (s *ResultCollector) AddAlerts(alerts []*pb.Alert) {
 	s.alertsMu.Lock()
 	s.Alerts = append(s.Alerts, alerts...)
 	s.alertsMu.Unlock()
-}
-
-// AddRun adds a run to the master structure (only once, first goroutine wins)
-func (s *ResultCollector) AddRun(run *pb.Run) {
-	s.runOnce.Do(func() {
-		s.Runs = run
-	})
-}
-
-// AddRepository adds or updates a repository (auto-dedups by key, skips if already exists)
-func (s *ResultCollector) AddRepository(key string, repo *pb.Repository) {
-	s.reposMu.Lock()
-	// Only add if not already present (optimization to avoid redundant overwrites)
-	if _, exists := s.Repositories[key]; !exists {
-		s.Repositories[key] = repo
-	}
-	s.reposMu.Unlock()
-}
-
-// AddRules adds multiple rules in a single lock operation (skips if already exists)
-func (s *ResultCollector) AddRules(rules map[string]*pb.Rule) {
-	s.rulesMu.Lock()
-	for id, rule := range rules {
-		// Only add if not already present (optimization to avoid redundant overwrites)
-		if _, exists := s.Rules[id]; !exists {
-			s.Rules[id] = rule
-		}
-	}
-	s.rulesMu.Unlock()
 }
 
 // TransformService handles SARIF to Protobuf transformation
@@ -101,13 +68,13 @@ func (ts *TransformService) WriteProtoFiles(result *ResultCollector) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Write runs to proto file
-	runList := &pb.RunList{Runs: []*pb.Run{result.Runs}}
-	runsPath := filepath.Join(ts.outputDir, "run.pb")
-	if err := ts.writeProtoFile(runsPath, runList); err != nil {
-		return fmt.Errorf("failed to write runs proto file: %w", err)
+	// Write analysis to proto file
+	analysisList := &pb.AnalysisList{Analyses: []*pb.Analysis{result.Analysis}}
+	analysisPath := filepath.Join(ts.outputDir, "analysis.pb")
+	if err := ts.writeProtoFile(analysisPath, analysisList); err != nil {
+		return fmt.Errorf("failed to write analysis proto file: %w", err)
 	}
-	ts.logger.Info("successfully wrote runs to proto file", "file", runsPath)
+	ts.logger.Info("successfully wrote analysis to proto file", "file", analysisPath)
 
 	// Write repositories to proto file
 	repos := make([]*pb.Repository, 0, len(result.Repositories))
@@ -171,25 +138,61 @@ func NewTransformService(logger *slog.Logger, sarifDirPath string, outputDir str
 
 // Transform converts SARIF files to Protobuf format
 func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollector, err error) {
-	// Get number of files in directory
-	sarifFiles, err := os.ReadDir(ts.sarifDirPath)
-
+	// Read all entries in the directory
+	dirEntries, err := os.ReadDir(ts.sarifDirPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SARIF directory: %w", err)
 	}
 
+	// Create the master structure that all workers will write to directly
+	masterResult := NewResultCollector()
+
+	// Load analysis metadata from analysis.json (written during download phase)
+	analysisPath := filepath.Join(ts.sarifDirPath, "analysis.json")
+	analysis, err := ts.loadAnalysisFromJSON(analysisPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load analysis.json: %w", err)
+	}
+	masterResult.Analysis = analysis
+	ts.logger.Info("loaded analysis from analysis.json",
+		"analysis_id", analysis.AnalysisId,
+		"tool_name", analysis.ToolName)
+
+	// Load repositories from repos.json (written during download phase)
+	reposPath := filepath.Join(ts.sarifDirPath, "repos.json")
+	repos, err := ts.loadRepositoriesFromJSON(reposPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load repos.json: %w", err)
+	}
+	for key, repo := range repos {
+		masterResult.Repositories[key] = repo
+	}
+	ts.logger.Info("loaded repositories from repos.json",
+		"count", len(repos))
+
+	// Filter to only SARIF files (skip analysis.json, repos.json, etc.)
+	var sarifFileNames []string
+	for _, entry := range dirEntries {
+		if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".sarif") {
+			sarifFileNames = append(sarifFileNames, entry.Name())
+		}
+	}
+
+	if len(sarifFileNames) == 0 {
+		ts.logger.Warn("no SARIF files found in directory", "path", ts.sarifDirPath)
+		return masterResult, nil
+	}
+
 	// Calculate optimal number of workers for concurrent processing
-	workers := util.CalculateOptimalWorkers(len(sarifFiles))
+	workers := util.CalculateOptimalWorkers(len(sarifFileNames))
 
 	ts.logger.Info("starting SARIF files processing",
 		"analysis_id", ts.analysisID,
 		"controller_repo", ts.controllerRepo,
-		"sarif_file_count", len(sarifFiles),
+		"sarif_file_count", len(sarifFileNames),
 		"workers", workers)
 
-	// Create the master structure that all workers will write to directly
-	masterResult := NewResultCollector()
-	sarifChan := make(chan string, len(sarifFiles))
+	sarifChan := make(chan string, len(sarifFileNames))
 
 	var wg sync.WaitGroup
 
@@ -205,9 +208,9 @@ func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollec
 		}(i)
 	}
 
-	// Send all SARIF files to the channel
-	for _, sarifFile := range sarifFiles {
-		sarifChan <- sarifFile.Name()
+	// Send only SARIF files to the channel
+	for _, name := range sarifFileNames {
+		sarifChan <- name
 	}
 	close(sarifChan)
 
@@ -278,20 +281,25 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 		// Process each run
 		for runIdx, run := range sarifDoc.Runs {
 
-			// Extract and write run information directly to master
-			pbRun := ts.extractRun(run, runIdx)
-			masterResult.AddRun(pbRun)
+			// Look up repository from pre-loaded repos.json data
+			repoFullName := ts.getRepoFullNameFromRun(run, sarifFile)
+			var repoRowId int32
+			masterResult.reposMu.RLock()
+			if repo, found := masterResult.Repositories[repoFullName]; found {
+				repoRowId = repo.RowId
+			} else {
+				ts.logger.Warn("repository not found in repos.json",
+					"worker_id", workerId,
+					"repo_full_name", repoFullName,
+					"sarif_file", sarifFile)
+			}
+			masterResult.reposMu.RUnlock()
 
 			// Extract rules and write directly to master (with auto-deduplication)
 			ruleMap := ts.extractRules(run, masterResult)
-			masterResult.AddRules(ruleMap)
-
-			// Extract repository info and write directly to master
-			repoKey, repo := ts.extractRepository(run, sarifFile, masterResult)
-			masterResult.AddRepository(repoKey, repo)
 
 			// Extract alerts and write directly to master (pass repo ID and ruleMap for FK references)
-			alerts := ts.extractAlerts(run, repo.RepositoryId, ruleMap, masterResult)
+			alerts := ts.extractAlerts(run, repoRowId, ruleMap, masterResult)
 			masterResult.AddAlerts(alerts)
 
 			ts.logger.Info("transformed SARIF run to proto",
@@ -305,26 +313,93 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 
 }
 
-// extractRun extracts run information from SARIF
-func (ts *TransformService) extractRun(run models.SarifRun, runIdx int) *pb.Run {
-	pbRun := &pb.Run{
-		RunId:      int32(runIdx + 1),
-		AnalysisId: ts.analysisID,
+// loadAnalysisFromJSON reads analysis.json and converts it to a pb.Analysis proto
+func (ts *TransformService) loadAnalysisFromJSON(filePath string) (*pb.Analysis, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
 	}
 
-	controllerRepo := ts.controllerRepo
-	pbRun.ControllerRepo = &controllerRepo
-	date := time.Now().Format("2006-01-02 15:04:05")
-	pbRun.Date = &date
-
-	// Extract tool information
-	pbRun.ToolName = run.Tool.Driver.Name
-	if run.Tool.Driver.SemanticVersion != "" {
-		version := run.Tool.Driver.SemanticVersion
-		pbRun.ToolVersion = &version
+	var record models.AnalysisRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
 	}
 
-	return pbRun
+	analysis := &pb.Analysis{
+		RowId:                record.RowID,
+		ToolName:             record.ToolName,
+		AnalysisId:           record.AnalysisID,
+		State:                record.State,
+		QueryLanguage:        record.QueryLanguage,
+		CreatedAt:            record.CreatedAt,
+		Status:               record.Status,
+		ScannedReposCount:    record.ScannedReposCount,
+		SkippedReposCount:    record.SkippedReposCount,
+		NotFoundReposCount:   record.NotFoundReposCount,
+		NoCodeqlDbReposCount: record.NoCodeqlDBReposCount,
+		OverLimitReposCount:  record.OverLimitReposCount,
+		ActionsWorkflowRunId: record.ActionsWorkflowRunID,
+		TotalReposCount:      record.TotalReposCount,
+	}
+
+	// Set optional fields
+	if record.ToolVersion != "" {
+		analysis.ToolVersion = &record.ToolVersion
+	}
+	if record.ControllerRepo != "" {
+		analysis.ControllerRepo = &record.ControllerRepo
+	}
+	if record.Date != "" {
+		analysis.Date = &record.Date
+	}
+	if record.CompletedAt != "" {
+		analysis.CompletedAt = &record.CompletedAt
+	}
+	if record.FailureReason != "" {
+		analysis.FailureReason = &record.FailureReason
+	}
+
+	return analysis, nil
+}
+
+// loadRepositoriesFromJSON reads repos.json and converts it to a map of pb.Repository protos keyed by full name
+func (ts *TransformService) loadRepositoriesFromJSON(filePath string) (map[string]*pb.Repository, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
+	}
+
+	var records []models.RepositoryRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
+	}
+
+	repos := make(map[string]*pb.Repository, len(records))
+	for _, record := range records {
+		repo := &pb.Repository{
+			RowId:               record.RowID,
+			RepositoryFullName:  record.RepositoryFullName,
+			RepositoryUrl:       record.RepositoryURL,
+			AnalysisStatus:      record.AnalysisStatus,
+			ResultCount:         record.ResultCount,
+			ArtifactSizeInBytes: record.ArtifactSizeInBytes,
+			AnalysisId:          record.AnalysisID,
+		}
+		repos[record.RepositoryFullName] = repo
+	}
+
+	return repos, nil
+}
+
+// getRepoFullNameFromRun extracts the repository full name from a SARIF run's versionControlProvenance
+func (ts *TransformService) getRepoFullNameFromRun(run models.SarifRun, sarifFile string) string {
+	if len(run.VersionControlProvenance) > 0 {
+		repoURI := strings.TrimRight(run.VersionControlProvenance[0].RepositoryURI, "/")
+		if parts := strings.Split(repoURI, "/"); len(parts) >= 2 {
+			return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+		}
+	}
+	return sarifFile // Fallback to filename
 }
 
 // extractRules extracts rules from SARIF run
@@ -332,26 +407,23 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Resu
 	ruleMap := make(map[string]*pb.Rule)
 
 	for _, rule := range run.Tool.Driver.Rules {
-		pbRule := &pb.Rule{}
-
-		// Extract rule string ID
 		ruleStringID := rule.ID
-		pbRule.Id = rule.ID
 
-		// Atomically check-and-reserve rule ID under write lock to prevent race conditions
-		masterResult.rulesMu.Lock()
-		if existingRule, exists := masterResult.Rules[ruleStringID]; exists {
-			// Reuse existing numeric ID for consistency
-			pbRule.RuleId = existingRule.RuleId
-		} else {
-			// Generate new unique rule ID using atomic counter (1-based for primary key)
-			pbRule.RuleId = int32(atomic.AddInt64(&masterResult.ruleCounter, 1))
-			// Reserve this ID immediately so other goroutines see it
-			masterResult.Rules[ruleStringID] = pbRule
+		// Fast path: if rule already exists in master, reuse it and skip construction
+		masterResult.rulesMu.RLock()
+		existingRule, exists := masterResult.Rules[ruleStringID]
+		masterResult.rulesMu.RUnlock()
+
+		if exists {
+			ruleMap[ruleStringID] = existingRule
+			continue
 		}
-		masterResult.rulesMu.Unlock()
 
-		pbRule.RuleName = rule.Name
+		// Build the rule fully before inserting into the shared map
+		pbRule := &pb.Rule{
+			Id:       rule.ID,
+			RuleName: rule.Name,
+		}
 
 		// Extract properties if present
 		if rule.Properties != nil {
@@ -375,6 +447,19 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Resu
 			}
 		}
 
+		// Double-check under write lock (another goroutine may have inserted between RLock and Lock)
+		masterResult.rulesMu.Lock()
+		if existingRule, exists := masterResult.Rules[ruleStringID]; exists {
+			// Another goroutine inserted it first — reuse existing
+			pbRule.RowId = existingRule.RowId
+		} else {
+			// Generate new unique rule ID using atomic counter (1-based for primary key)
+			pbRule.RowId = int32(atomic.AddInt64(&masterResult.ruleCounter, 1))
+			// Insert fully-built rule so other goroutines see complete data
+			masterResult.Rules[ruleStringID] = pbRule
+		}
+		masterResult.rulesMu.Unlock()
+
 		ruleMap[pbRule.Id] = pbRule
 	}
 
@@ -385,30 +470,30 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Resu
 func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int32, ruleMap map[string]*pb.Rule, masterResult *ResultCollector) []*pb.Alert {
 	var alerts []*pb.Alert
 
-	// Parse analysis ID from command input
-	analysisID, _ := strconv.Atoi(ts.analysisID)
-
 	for _, result := range run.Results {
 		// Generate unique alert ID using atomic counter (1-based for primary key)
 		alertID := int32(atomic.AddInt64(&masterResult.alertCounter, 1))
 
 		pbAlert := &pb.Alert{
-			AlertId:      alertID,
-			AnalysisId:   int32(analysisID), // FK to analysis from command input
-			RepositoryId: repositoryID,      // FK to Repository.RepositoryID
-			Message:      result.Message.Text,
+			RowId:           alertID,
+			AnalysisRowId:   masterResult.Analysis.RowId, // FK to Analysis from analysis.json
+			RepositoryRowId: repositoryID,                // FK to Repository from repos.json
+			Message:         result.Message.Text,
 		}
 
 		// Get Rule ID (convert string identifier to numeric PK)
 		ruleIDStr := result.RuleID
 		// First check local ruleMap
 		if rule, found := ruleMap[ruleIDStr]; found {
-			pbAlert.RuleId = rule.RuleId // FK to Rule.RuleID (numeric)
+			pbAlert.RuleRowId = rule.RowId // FK to Rule.RuleID (numeric)
 		} else {
 			// Fallback: check master in case rule was defined in another SARIF file
 			masterResult.rulesMu.RLock()
 			if masterRule, found := masterResult.Rules[ruleIDStr]; found {
-				pbAlert.RuleId = masterRule.RuleId
+				pbAlert.RuleRowId = masterRule.RowId
+			} else {
+				ts.logger.Warn("rule not found for alert, RuleRowId will be 0",
+					"rule_id", ruleIDStr)
 			}
 			masterResult.rulesMu.RUnlock()
 		}
@@ -528,7 +613,8 @@ func (ts *TransformService) extractCodeFlow(pbAlert *pb.Alert, result models.Sar
 	}
 }
 
-// extractCodeFromSnippetStructured extracts the exact code from a snippet using region coordinates
+// extractCodeFromSnippetStructured extracts the exact code from a snippet using region coordinates.
+// Handles both single-line and multi-line regions.
 func (ts *TransformService) extractCodeFromSnippetStructured(snippetText string, region models.SarifRegion, contextRegion models.SarifRegion) string {
 	if region.StartLine == 0 || region.StartColumn == 0 || region.EndColumn == 0 {
 		return ""
@@ -539,60 +625,60 @@ func (ts *TransformService) extractCodeFromSnippetStructured(snippetText string,
 	}
 
 	lines := strings.Split(snippetText, "\n")
-	lineIndex := region.StartLine - contextRegion.StartLine
+	startLineIndex := region.StartLine - contextRegion.StartLine
 
-	if lineIndex < 0 || lineIndex >= len(lines) {
+	if startLineIndex < 0 || startLineIndex >= len(lines) {
 		return ""
 	}
 
-	line := lines[lineIndex]
-	start := region.StartColumn - 1
-	end := region.EndColumn - 1
+	// Determine the end line index (defaults to start line for single-line regions)
+	endLine := region.EndLine
+	if endLine == 0 {
+		endLine = region.StartLine
+	}
+	endLineIndex := endLine - contextRegion.StartLine
 
-	if start < 0 || end > len(line) || start >= end {
+	if endLineIndex < 0 || endLineIndex >= len(lines) {
 		return ""
 	}
 
-	return line[start:end]
-}
+	// Single-line region: extract substring from one line
+	if startLineIndex == endLineIndex {
+		line := lines[startLineIndex]
+		start := region.StartColumn - 1
+		end := region.EndColumn - 1
 
-// extractRepository creates repository information from SARIF file
-func (ts *TransformService) extractRepository(run models.SarifRun, sarifFile string, masterResult *ResultCollector) (string, *pb.Repository) {
-
-	repo := &pb.Repository{
-		RepositoryName: sarifFile, // Fallback to filename
-		RepositoryUrl:  "",
-	}
-
-	// Extract from versionControlProvenance if available
-	if len(run.VersionControlProvenance) > 0 {
-		repoUri := run.VersionControlProvenance[0].RepositoryURI
-		repo.RepositoryUrl = repoUri
-
-		// Extract repository name from URL (e.g., "mrva-security-demo/anaconda")
-		if parts := strings.Split(repoUri, "/"); len(parts) >= 2 {
-			repo.RepositoryName = parts[len(parts)-2] + "/" + parts[len(parts)-1]
+		if start < 0 || end > len(line) || start >= end {
+			return ""
 		}
+		return line[start:end]
 	}
 
-	// Use repository URL as the unique identifier
-	repoKey := repo.RepositoryUrl
-	if repoKey == "" {
-		repoKey = repo.RepositoryName // Fallback to name if no URL
+	// Multi-line region: extract from start column on first line through end column on last line
+	var sb strings.Builder
+
+	// First line: from StartColumn to end of line
+	firstLine := lines[startLineIndex]
+	start := region.StartColumn - 1
+	if start < 0 || start > len(firstLine) {
+		return ""
+	}
+	sb.WriteString(firstLine[start:])
+
+	// Middle lines: include entirely
+	for i := startLineIndex + 1; i < endLineIndex; i++ {
+		sb.WriteString("\n")
+		sb.WriteString(lines[i])
 	}
 
-	// Atomically check-and-reserve repository ID under write lock to prevent race conditions
-	masterResult.reposMu.Lock()
-	if existingRepo, exists := masterResult.Repositories[repoKey]; exists {
-		// Reuse existing repository ID
-		repo.RepositoryId = existingRepo.RepositoryId
-	} else {
-		// Generate new unique repository ID using atomic counter (1-based for primary key)
-		repo.RepositoryId = int32(atomic.AddInt64(&masterResult.repositoryCounter, 1))
-		// Reserve this ID immediately so other goroutines see it
-		masterResult.Repositories[repoKey] = repo
+	// Last line: from start of line to EndColumn
+	lastLine := lines[endLineIndex]
+	end := region.EndColumn - 1
+	if end < 0 || end > len(lastLine) {
+		return ""
 	}
-	masterResult.reposMu.Unlock()
+	sb.WriteString("\n")
+	sb.WriteString(lastLine[:end])
 
-	return repoKey, repo
+	return sb.String()
 }
