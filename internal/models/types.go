@@ -60,7 +60,7 @@ type MRVASummaryResponse struct {
 	FailureReason          string                 `json:"failure_reason,omitempty"`
 	CompletedAt            string                 `json:"completed_at"`
 	CreatedAt              string                 `json:"created_at"`
-	ActionsWorkflowRunID   int                    `json:"actions_workflow_run_id"`
+	ActionsWorkflowRunID   int64                  `json:"actions_workflow_run_id"`
 	ScannedRepositories    []ScannedRepository    `json:"scanned_repositories"`
 	SkippedRepositories    SkippedRepositories    `json:"skipped_repositories"`
 	NotFoundRepositories   NotFoundRepositories   `json:"not_found_repositories"`
@@ -87,7 +87,7 @@ type AnalysisRecord struct {
 	NotFoundReposCount   int32  `json:"not_found_repos_count"`
 	NoCodeqlDBReposCount int32  `json:"no_codeql_db_repos_count"`
 	OverLimitReposCount  int32  `json:"over_limit_repos_count"`
-	ActionsWorkflowRunID int32  `json:"actions_workflow_run_id"`
+	ActionsWorkflowRunID int64  `json:"actions_workflow_run_id"`
 	TotalReposCount      int32  `json:"total_repos_count"`
 }
 
@@ -117,7 +117,7 @@ func (s *MRVASummaryResponse) ToAnalysisRecord(analysisID, controllerRepo string
 		NotFoundReposCount:   int32(s.NotFoundRepositories.RepositoryCount),
 		NoCodeqlDBReposCount: int32(s.NoCodeQLDBRepositories.RepositoryCount),
 		OverLimitReposCount:  int32(s.OverLimitRepositories.RepositoryCount),
-		ActionsWorkflowRunID: int32(s.ActionsWorkflowRunID),
+		ActionsWorkflowRunID: s.ActionsWorkflowRunID,
 		TotalReposCount: int32(len(s.ScannedRepositories)) +
 			int32(s.SkippedRepositories.AccessMismatchRepositories.RepositoryCount) +
 			int32(s.NotFoundRepositories.RepositoryCount) +

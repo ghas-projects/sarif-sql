@@ -33,7 +33,7 @@ message Analysis {
   int32 not_found_repos_count = 15;
   int32 no_codeql_db_repos_count = 16;
   int32 over_limit_repos_count = 17; 
-  int32 actions_workflow_run_id = 18;
+  int64 actions_workflow_run_id = 18;
   int32 total_repos_count = 19;
 }
 

@@ -132,7 +132,7 @@ type Analysis struct {
 	NotFoundReposCount   int32                  `protobuf:"varint,15,opt,name=not_found_repos_count,json=notFoundReposCount,proto3" json:"not_found_repos_count,omitempty"`
 	NoCodeqlDbReposCount int32                  `protobuf:"varint,16,opt,name=no_codeql_db_repos_count,json=noCodeqlDbReposCount,proto3" json:"no_codeql_db_repos_count,omitempty"`
 	OverLimitReposCount  int32                  `protobuf:"varint,17,opt,name=over_limit_repos_count,json=overLimitReposCount,proto3" json:"over_limit_repos_count,omitempty"`
-	ActionsWorkflowRunId int32                  `protobuf:"varint,18,opt,name=actions_workflow_run_id,json=actionsWorkflowRunId,proto3" json:"actions_workflow_run_id,omitempty"`
+	ActionsWorkflowRunId int64                  `protobuf:"varint,18,opt,name=actions_workflow_run_id,json=actionsWorkflowRunId,proto3" json:"actions_workflow_run_id,omitempty"`
 	TotalReposCount      int32                  `protobuf:"varint,19,opt,name=total_repos_count,json=totalReposCount,proto3" json:"total_repos_count,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
@@ -287,7 +287,7 @@ func (x *Analysis) GetOverLimitReposCount() int32 {
 	return 0
 }
 
-func (x *Analysis) GetActionsWorkflowRunId() int32 {
+func (x *Analysis) GetActionsWorkflowRunId() int64 {
 	if x != nil {
 		return x.ActionsWorkflowRunId
 	}
@@ -772,7 +772,7 @@ const file_proto_sarifpb_sarif_proto_rawDesc = "" +
 	"\x15not_found_repos_count\x18\x0f \x01(\x05R\x12notFoundReposCount\x126\n" +
 	"\x18no_codeql_db_repos_count\x18\x10 \x01(\x05R\x14noCodeqlDbReposCount\x123\n" +
 	"\x16over_limit_repos_count\x18\x11 \x01(\x05R\x13overLimitReposCount\x125\n" +
-	"\x17actions_workflow_run_id\x18\x12 \x01(\x05R\x14actionsWorkflowRunId\x12*\n" +
+	"\x17actions_workflow_run_id\x18\x12 \x01(\x03R\x14actionsWorkflowRunId\x12*\n" +
 	"\x11total_repos_count\x18\x13 \x01(\x05R\x0ftotalReposCountB\x0f\n" +
 	"\r_tool_versionB\x12\n" +
 	"\x10_controller_repoB\a\n" +
