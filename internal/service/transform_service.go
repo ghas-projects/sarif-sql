@@ -12,23 +12,21 @@ import (
 	"sync/atomic"
 
 	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	pb "github.com/ghas-projects/sarif-protobuf/proto/sarifpb"
 	"github.com/ghas-projects/sarif-protobuf/util"
-	"google.golang.org/protobuf/proto"
 )
 
 // ResultCollector provides thread-safe access to the master result structure
 type ResultCollector struct {
 	alertsMu sync.Mutex
-	Alerts   []*pb.Alert
+	Alerts   []*models.Alert
 
-	Analysis *pb.Analysis
+	Analysis *models.Analysis
 
 	reposMu      sync.RWMutex
-	Repositories map[string]*pb.Repository
+	Repositories map[string]*models.SQLRepository
 
 	rulesMu sync.RWMutex
-	Rules   map[string]*pb.Rule
+	Rules   map[string]*models.Rule
 
 	// Atomic counters for unique ID generation across goroutines
 	alertCounter int64
@@ -38,91 +36,27 @@ type ResultCollector struct {
 // NewResultCollector creates a new ResultCollector instance
 func NewResultCollector() *ResultCollector {
 	return &ResultCollector{
-		Repositories: make(map[string]*pb.Repository),
-		Rules:        make(map[string]*pb.Rule),
-		Alerts:       make([]*pb.Alert, 0),
-		Analysis:     &pb.Analysis{},
+		Repositories: make(map[string]*models.SQLRepository),
+		Rules:        make(map[string]*models.Rule),
+		Alerts:       make([]*models.Alert, 0),
+		Analysis:     &models.Analysis{},
 	}
 }
 
 // AddAlerts adds multiple alerts in a single lock operation (more efficient)
-func (s *ResultCollector) AddAlerts(alerts []*pb.Alert) {
+func (s *ResultCollector) AddAlerts(alerts []*models.Alert) {
 	s.alertsMu.Lock()
 	s.Alerts = append(s.Alerts, alerts...)
 	s.alertsMu.Unlock()
 }
 
-// TransformService handles SARIF to Protobuf transformation
+// TransformService handles SARIF transformation and data extraction
 type TransformService struct {
 	logger         *slog.Logger
 	sarifDirPath   string
 	outputDir      string
 	analysisID     string
 	controllerRepo string
-}
-
-func (ts *TransformService) WriteProtoFiles(result *ResultCollector) error {
-
-	// Ensure output directory exists
-	if err := os.MkdirAll(ts.outputDir, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Write analysis to proto file
-	analysisList := &pb.AnalysisList{Analyses: []*pb.Analysis{result.Analysis}}
-	analysisPath := filepath.Join(ts.outputDir, "analysis.pb")
-	if err := ts.writeProtoFile(analysisPath, analysisList); err != nil {
-		return fmt.Errorf("failed to write analysis proto file: %w", err)
-	}
-	ts.logger.Info("successfully wrote analysis to proto file", "file", analysisPath)
-
-	// Write repositories to proto file
-	repos := make([]*pb.Repository, 0, len(result.Repositories))
-	for _, repo := range result.Repositories {
-		repos = append(repos, repo)
-	}
-	repoList := &pb.RepositoryList{Repositories: repos}
-	reposPath := filepath.Join(ts.outputDir, "repository.pb")
-	if err := ts.writeProtoFile(reposPath, repoList); err != nil {
-		return fmt.Errorf("failed to write repositories proto file: %w", err)
-	}
-	ts.logger.Info("successfully wrote repositories to proto file", "file", reposPath)
-
-	// Write rules to proto file
-	rules := make([]*pb.Rule, 0, len(result.Rules))
-	for _, rule := range result.Rules {
-		rules = append(rules, rule)
-	}
-	ruleList := &pb.RuleList{Rules: rules}
-	rulesPath := filepath.Join(ts.outputDir, "rule.pb")
-	if err := ts.writeProtoFile(rulesPath, ruleList); err != nil {
-		return fmt.Errorf("failed to write rules proto file: %w", err)
-	}
-	ts.logger.Info("successfully wrote rules to proto file", "file", rulesPath)
-
-	// Write alerts to proto file
-	alertList := &pb.AlertList{Alerts: result.Alerts}
-	alertsPath := filepath.Join(ts.outputDir, "alert.pb")
-	if err := ts.writeProtoFile(alertsPath, alertList); err != nil {
-		return fmt.Errorf("failed to write alerts proto file: %w", err)
-	}
-	ts.logger.Info("successfully wrote alerts to proto file", "file", alertsPath)
-
-	return nil
-}
-
-// writeProtoFile marshals a protobuf message and writes it to a file
-func (ts *TransformService) writeProtoFile(filePath string, msg proto.Message) error {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal proto message: %w", err)
-	}
-
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", filePath, err)
-	}
-
-	return nil
 }
 
 // NewTransformService creates a new TransformService instance
@@ -136,7 +70,7 @@ func NewTransformService(logger *slog.Logger, sarifDirPath string, outputDir str
 	}
 }
 
-// Transform converts SARIF files to Protobuf format
+// Transform converts SARIF files into structured result data
 func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollector, err error) {
 	// Read all entries in the directory
 	dirEntries, err := os.ReadDir(ts.sarifDirPath)
@@ -302,7 +236,7 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 			alerts := ts.extractAlerts(run, repoRowId, ruleMap, masterResult)
 			masterResult.AddAlerts(alerts)
 
-			ts.logger.Info("transformed SARIF run to proto",
+			ts.logger.Info("transformed SARIF run",
 				"worker_id", workerId,
 				"sarif_file", sarifFile,
 				"run_index", runIdx,
@@ -313,8 +247,8 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 
 }
 
-// loadAnalysisFromJSON reads analysis.json and converts it to a pb.Analysis proto
-func (ts *TransformService) loadAnalysisFromJSON(filePath string) (*pb.Analysis, error) {
+// loadAnalysisFromJSON reads analysis.json and converts it to an Analysis
+func (ts *TransformService) loadAnalysisFromJSON(filePath string) (*models.Analysis, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
@@ -325,7 +259,7 @@ func (ts *TransformService) loadAnalysisFromJSON(filePath string) (*pb.Analysis,
 		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
 	}
 
-	analysis := &pb.Analysis{
+	analysis := &models.Analysis{
 		RowId:                record.RowID,
 		ToolName:             record.ToolName,
 		AnalysisId:           record.AnalysisID,
@@ -362,8 +296,8 @@ func (ts *TransformService) loadAnalysisFromJSON(filePath string) (*pb.Analysis,
 	return analysis, nil
 }
 
-// loadRepositoriesFromJSON reads repos.json and converts it to a map of pb.Repository protos keyed by full name
-func (ts *TransformService) loadRepositoriesFromJSON(filePath string) (map[string]*pb.Repository, error) {
+// loadRepositoriesFromJSON reads repos.json and converts it to a map of SQLRepository keyed by full name
+func (ts *TransformService) loadRepositoriesFromJSON(filePath string) (map[string]*models.SQLRepository, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
@@ -374,9 +308,9 @@ func (ts *TransformService) loadRepositoriesFromJSON(filePath string) (map[strin
 		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
 	}
 
-	repos := make(map[string]*pb.Repository, len(records))
+	repos := make(map[string]*models.SQLRepository, len(records))
 	for _, record := range records {
-		repo := &pb.Repository{
+		repo := &models.SQLRepository{
 			RowId:               record.RowID,
 			RepositoryFullName:  record.RepositoryFullName,
 			RepositoryUrl:       record.RepositoryURL,
@@ -403,8 +337,8 @@ func (ts *TransformService) getRepoFullNameFromRun(run models.SarifRun, sarifFil
 }
 
 // extractRules extracts rules from SARIF run
-func (ts *TransformService) extractRules(run models.SarifRun, masterResult *ResultCollector) map[string]*pb.Rule {
-	ruleMap := make(map[string]*pb.Rule)
+func (ts *TransformService) extractRules(run models.SarifRun, masterResult *ResultCollector) map[string]*models.Rule {
+	ruleMap := make(map[string]*models.Rule)
 
 	for _, rule := range run.Tool.Driver.Rules {
 		ruleStringID := rule.ID
@@ -420,7 +354,7 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Resu
 		}
 
 		// Build the rule fully before inserting into the shared map
-		pbRule := &pb.Rule{
+		pbRule := &models.Rule{
 			Id:       rule.ID,
 			RuleName: rule.Name,
 		}
@@ -467,14 +401,14 @@ func (ts *TransformService) extractRules(run models.SarifRun, masterResult *Resu
 }
 
 // extractAlerts extracts alerts from SARIF run
-func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int32, ruleMap map[string]*pb.Rule, masterResult *ResultCollector) []*pb.Alert {
-	var alerts []*pb.Alert
+func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int32, ruleMap map[string]*models.Rule, masterResult *ResultCollector) []*models.Alert {
+	var alerts []*models.Alert
 
 	for _, result := range run.Results {
 		// Generate unique alert ID using atomic counter (1-based for primary key)
 		alertID := int32(atomic.AddInt64(&masterResult.alertCounter, 1))
 
-		pbAlert := &pb.Alert{
+		pbAlert := &models.Alert{
 			RowId:           alertID,
 			AnalysisRowId:   masterResult.Analysis.RowId, // FK to Analysis from analysis.json
 			RepositoryRowId: repositoryID,                // FK to Repository from repos.json
@@ -518,7 +452,7 @@ func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int3
 }
 
 // extractLocation extracts location information from a result
-func (ts *TransformService) extractLocation(pbAlert *pb.Alert, result models.SarifResult) {
+func (ts *TransformService) extractLocation(pbAlert *models.Alert, result models.SarifResult) {
 	if len(result.Locations) == 0 {
 		return
 	}
@@ -569,7 +503,7 @@ func (ts *TransformService) extractLocation(pbAlert *pb.Alert, result models.Sar
 }
 
 // extractCodeFlow extracts code flow information (source/sink, step count)
-func (ts *TransformService) extractCodeFlow(pbAlert *pb.Alert, result models.SarifResult) {
+func (ts *TransformService) extractCodeFlow(pbAlert *models.Alert, result models.SarifResult) {
 	if len(result.CodeFlows) == 0 {
 		return
 	}
