@@ -6,6 +6,7 @@ import (
 )
 
 // Repository represents a GitHub repository to be analyzed
+// These structs mirror the GitHub API response structures for ease of JSON unmarshalling
 type Repository struct {
 	FullName string `json:"full_name" toml:"full_name"`
 }

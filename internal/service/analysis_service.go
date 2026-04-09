@@ -247,7 +247,7 @@ func (s *AnalysisService) DownloadAnalysisFiles(ctx context.Context, outputDir s
 	s.logger.Info("successfully scanned repositories fetched from analysis summary",
 		"count", len(scannedRepositories))
 
-	// Write analysis.json mapping summary data to the Analysis proto model
+	// Write analysis.json mapping summary data to the Analysis model
 	if err := s.writeAnalysisJSON(summary, outputDir); err != nil {
 		s.logger.Error("failed to write analysis.json", "error", err)
 		return fmt.Errorf("failed to write analysis.json: %w", err)
