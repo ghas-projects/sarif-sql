@@ -34,6 +34,9 @@ func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryRe
 	md.WriteString(fmt.Sprintf("**Generated:** %s\n\n", time.Now().Format("2006-01-02 15:04:05 MST")))
 	md.WriteString(fmt.Sprintf("**Total Repositories:** %d\n\n", totalRepos))
 
+	// Add scan status field
+	md.WriteString(fmt.Sprintf("**Scan Status:** `%s`\n\n", summary.Status))
+
 	// Summary section
 	md.WriteString("## Summary\n\n")
 	md.WriteString("| Status | Count |\n")
@@ -246,6 +249,7 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 	md.WriteString(fmt.Sprintf("**Completed At:** %s\n\n", summary.CompletedAt))
 	md.WriteString(fmt.Sprintf("**Actions Workflow Run ID:** %d\n\n", summary.ActionsWorkflowRunID))
 	md.WriteString(fmt.Sprintf("**Generated:** %s\n\n", time.Now().Format("2006-01-02 15:04:05 MST")))
+	md.WriteString(fmt.Sprintf("**Scan Status:** `%s`\n\n", summary.Status))
 
 	// Overview Section
 	md.WriteString("## Overview\n\n")
