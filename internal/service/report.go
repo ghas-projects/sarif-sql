@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/models"
 )
 
 // generateMRVAStatusReport creates a markdown report from MRVA status results

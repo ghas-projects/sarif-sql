@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/models"
 	_ "modernc.org/sqlite"
 )
 

@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ghas-projects/sarif-protobuf/cmd/analysis"
-	"github.com/ghas-projects/sarif-protobuf/cmd/transform"
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/util"
+	"github.com/ghas-projects/sarif-sql/cmd/analysis"
+	"github.com/ghas-projects/sarif-sql/cmd/transform"
+	"github.com/ghas-projects/sarif-sql/internal/models"
+	"github.com/ghas-projects/sarif-sql/util"
 	"github.com/spf13/cobra"
 )
 
@@ -20,13 +20,13 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "sarif-protobuf",
+	Use:   "sarif-sql",
 	Short: "A tool to convert SARIF files to Protobuf format",
-	Long:  `sarif-protobuf is a command-line tool that converts SARIF (Static Analysis Results Interchange Format) files into Protobuf format for easier data processing and analysis.`,
+	Long:  `sarif-sql is a command-line tool that converts SARIF (Static Analysis Results Interchange Format) files into SQL format for easier data processing and analysis.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 		// Generate log file path automatically
-		logFilePath := util.GenerateLogFileName("sarif-protobuf")
+		logFilePath := util.GenerateLogFileName("sarif-sql")
 
 		// Initialize logger with automatic log file
 		loggerConfig := util.LoggerConfig{

@@ -1,4 +1,4 @@
-module github.com/ghas-projects/sarif-protobuf
+module github.com/ghas-projects/sarif-sql
 
 go 1.25.2
 

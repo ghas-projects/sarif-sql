@@ -11,8 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/util"
+	"github.com/ghas-projects/sarif-sql/internal/models"
+	"github.com/ghas-projects/sarif-sql/util"
 )
 
 // ResultCollector provides thread-safe access to the master result structure

@@ -1,4 +1,4 @@
-# SARIF-Protobuf
+# SARIF-SQL
 
 A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into Protocol Buffer (Protobuf) format for efficient data processing and analytics.
 
@@ -12,12 +12,12 @@ A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repositor
 ### Build from Source
 
 ```bash
-git clone https://github.com/ghas-projects/sarif-protobuf.git
-cd sarif-protobuf
-go build -o sarif-protobuf
+git clone https://github.com/ghas-projects/sarif-sql.git
+cd sarif-sql
+go build -o sarif-sql
 ```
 
-The binary will be created as `sarif-protobuf` in the current directory.
+The binary will be created as `sarif-sql` in the current directory.
 
 ## Usage
 
@@ -26,7 +26,7 @@ The binary will be created as `sarif-protobuf` in the current directory.
 Convert SARIF files to Protobuf format for analytics and reporting:
 
 ```bash
-./sarif-protobuf transform \
+./sarif-sql transform \
   --analysis-id 12345 \
   --controller-repo org/repo \
   --output ./proto-output
@@ -51,7 +51,7 @@ Convert SARIF files to Protobuf format for analytics and reporting:
 Initialize directory structure for a new MRVA analysis:
 
 ```bash
-./sarif-protobuf analysis start \
+./sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
   --repos-file repos.toml \
@@ -61,7 +61,7 @@ Initialize directory structure for a new MRVA analysis:
 Or with GitHub App authentication:
 
 ```bash
-./sarif-protobuf analysis start \
+./sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
   --repos "org/repo1,org/repo2,org/repo3" \
@@ -74,7 +74,7 @@ Or with GitHub App authentication:
 Download SARIF artifacts from completed analyses:
 
 ```bash
-./sarif-protobuf analysis download \
+./sarif-sql analysis download \
   --repos-file repos.toml \
   --token $GITHUB_TOKEN
 ```
@@ -86,7 +86,7 @@ Generates a status report at `reports/{analysis-id}-{repo}-status-report.md`
 Fetch and generate summary report for an MRVA analysis:
 
 ```bash
-./sarif-protobuf analysis summary \ at `reports/summary/{analysis-id}-{repo}-summary-report.md`
+./sarif-sql analysis summary \ at `reports/summary/{analysis-id}-{repo}-summary-report.md`
 
 ### Repository List Formats
 
@@ -125,7 +125,7 @@ full_name = "owner/repo3"
 
 ```bash
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
-./sarif-protobuf analysis download --token $GITHUB_TOKEN ...
+./sarif-sql analysis download --token $GITHUB_TOKEN ...
 ```
 
 **Required Scopes:**
@@ -139,7 +139,7 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 ...
 -----END RSA PRIVATE KEY-----"
 
-./sarif-protobuf analysis download \
+./sarif-sql analysis download \
   --private-key "$GITHUB_APP_PRIVATE_KEY" \
   ...
 ```
@@ -152,7 +152,7 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 ### Project Structure
 
 ```
-sarif-protobuf/
+sarif-sql/
 ├── cmd/                    # CLI commands
 │   ├── analysis/          # MRVA analysis commands
 │   └── transform/         # SARIF transformation commands
@@ -175,7 +175,7 @@ sarif-protobuf/
 
 ## Logging
 
-All operations log to `logs/sarif-protobuf-YYYYMMDD-HHMMSS.json` in structured JSON format:
+All operations log to `logs/sarif-sql-YYYYMMDD-HHMMSS.json` in structured JSON format:
 
 ```json
 {"time":"2026-02-06T14:07:49Z","level":"INFO","msg":"transformation completed","total_alerts":3230,"total_repositories":10}
@@ -194,7 +194,7 @@ All operations log to `logs/sarif-protobuf-YYYYMMDD-HHMMSS.json` in structured J
 
 ```bash
 # 1. Start analysis
-./sarif-protobuf analysis start \
+./sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --repos-file repos.toml \
@@ -203,7 +203,7 @@ All operations log to `logs/sarif-protobuf-YYYYMMDD-HHMMSS.json` in structured J
 # 2. Wait for analysis to complete (check GitHub UI or use summary command)
 
 # 3. Download SARIF artifacts
-./sarif-protobuf analysis download \
+./sarif-sql analysis download \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --directory ./analyses/12345-org-controller \
@@ -211,14 +211,14 @@ All operations log to `logs/sarif-protobuf-YYYYMMDD-HHMMSS.json` in structured J
   --token $GITHUB_TOKEN
 
 # 4. Transform to Protobuf
-./sarif-protobuf transform \
+./sarif-sql transform \
   --sarif-directory ./analyses/12345-org-controller \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --output ./proto-output
 
 # 5. Generate summary report
-./sarif-protobuf analysis summary \
+./sarif-sql analysis summary \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --repos-file repos.toml \

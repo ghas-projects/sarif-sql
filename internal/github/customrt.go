@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/auth"
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/auth"
+	"github.com/ghas-projects/sarif-sql/internal/models"
 )
 
 // AuthProvider fetches an Authorization header value (e.g. "Bearer <token>") for a request.

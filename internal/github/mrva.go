@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/models"
 )
 
 // FetchMRVAStatus fetches the MRVA status for a specific repository

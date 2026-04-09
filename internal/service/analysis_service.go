@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/auth"
-	"github.com/ghas-projects/sarif-protobuf/internal/github"
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/util"
+	"github.com/ghas-projects/sarif-sql/internal/auth"
+	"github.com/ghas-projects/sarif-sql/internal/github"
+	"github.com/ghas-projects/sarif-sql/internal/models"
+	"github.com/ghas-projects/sarif-sql/util"
 )
 
 // AnalysisService handles analysis operations

@@ -10,7 +10,7 @@ help: ## Print this help message.
 	
 .PHONY: build
 build: ## Build the binary.
-	go build -o dist/sarif-protobuf;
+	go build -o dist/sarif-sql;
 
 .PHONY: clean
 clean: ## Delete the binary.

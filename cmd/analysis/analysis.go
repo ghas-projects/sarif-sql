@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/auth"
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/internal/service"
+	"github.com/ghas-projects/sarif-sql/internal/auth"
+	"github.com/ghas-projects/sarif-sql/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/service"
 	"github.com/spf13/cobra"
 )
 

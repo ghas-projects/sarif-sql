@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ghas-projects/sarif-protobuf/internal/models"
-	"github.com/ghas-projects/sarif-protobuf/internal/service"
-	"github.com/ghas-projects/sarif-protobuf/internal/store"
+	"github.com/ghas-projects/sarif-sql/internal/models"
+	"github.com/ghas-projects/sarif-sql/internal/service"
+	"github.com/ghas-projects/sarif-sql/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -26,10 +26,10 @@ for reporting and analytics purposes.
 
 Examples:
   # Transform a single SARIF file
-  sarif-protobuf transform --sarif-file analysis.sarif --analysis-id 12345 --repo my-org/my-repo --output ./output
+	sarif-sql transform --sarif-file analysis.sarif --analysis-id 12345 --repo my-org/my-repo --output ./output
 
   # Transform all SARIF files in a directory
-  sarif-protobuf transform --sarif-dir ./analyses/12345 --analysis-id 12345 --output ./output`,
+	sarif-sql transform --sarif-dir ./analyses/12345 --analysis-id 12345 --output ./output`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Call parent's PersistentPreRunE if it exists
 		if cmd.HasParent() {
