@@ -119,10 +119,6 @@ func runTransform(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	if err := db.CreateIndexes(); err != nil {
-		return fmt.Errorf("create indexes: %w", err)
-	}
-
 	logger.Info("transformation completed successfully",
 		"db", db.Path(),
 		"total_repositories", len(result.Repositories),

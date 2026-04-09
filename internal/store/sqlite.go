@@ -225,22 +225,6 @@ func (s *SQLiteStore) WriteAlerts(tx *sql.Tx, alerts []*models.Alert) error {
 	return nil
 }
 
-// CreateIndexes creates indexes on the alert table for efficient querying.
-// This should be called after all data has been written.
-func (s *SQLiteStore) CreateIndexes() error {
-	indexes := []string{
-		"CREATE INDEX IF NOT EXISTS idx_alert_rule_row_id ON alert(rule_row_id)",
-		"CREATE INDEX IF NOT EXISTS idx_alert_repository_row_id ON alert(repository_row_id)",
-		"CREATE INDEX IF NOT EXISTS idx_alert_analysis_row_id ON alert(analysis_row_id)",
-	}
-	for _, ddl := range indexes {
-		if _, err := s.db.Exec(ddl); err != nil {
-			return fmt.Errorf("create index: %w", err)
-		}
-	}
-	return nil
-}
-
 // ---------- nullable helpers ----------
 
 // optStr converts an optional string pointer to a sql.NullString
