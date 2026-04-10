@@ -98,8 +98,11 @@ func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollec
 	if err != nil {
 		return nil, fmt.Errorf("failed to load repos.json: %w", err)
 	}
-	for key, repo := range repos {
-		masterResult.Repositories[key] = repo
+	for _, repo := range repos {
+		// Normalize key to lowercase for case-insensitive lookup.
+		// The GitHub API may return repository full names in different casing
+		// than the canonical URI in SARIF versionControlProvenance.
+		masterResult.Repositories[strings.ToLower(repo.RepositoryFullName)] = repo
 	}
 	ts.logger.Info("loaded repositories from repos.json",
 		"count", len(repos))
@@ -215,11 +218,11 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 		// Process each run
 		for runIdx, run := range sarifDoc.Runs {
 
-			// Look up repository from pre-loaded repos.json data
+			// Look up repository from pre-loaded repos.json data (case-insensitive)
 			repoFullName := ts.getRepoFullNameFromRun(run, sarifFile)
 			var repoRowId int32
 			masterResult.reposMu.RLock()
-			if repo, found := masterResult.Repositories[repoFullName]; found {
+			if repo, found := masterResult.Repositories[strings.ToLower(repoFullName)]; found {
 				repoRowId = repo.RowId
 			} else {
 				ts.logger.Warn("repository not found in repos.json",
