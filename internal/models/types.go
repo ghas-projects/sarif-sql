@@ -25,6 +25,9 @@ type AccessMismatchRepositories struct {
 
 type SkippedRepositories struct {
 	AccessMismatchRepositories AccessMismatchRepositories `json:"access_mismatch_repos"`
+	NotFoundRepositories       NotFoundRepositories       `json:"not_found_repos"`
+	NoCodeQLDBRepositories     NoCodeQLDBRepositories     `json:"no_codeql_db_repos"`
+	OverLimitRepositories      OverLimitRepositories      `json:"over_limit_repos"`
 }
 
 type NotFoundRepositories struct {
@@ -63,10 +66,7 @@ type MRVASummaryResponse struct {
 	CreatedAt              string                 `json:"created_at"`
 	ActionsWorkflowRunID   int64                  `json:"actions_workflow_run_id"`
 	ScannedRepositories    []ScannedRepository    `json:"scanned_repositories"`
-	SkippedRepositories    SkippedRepositories    `json:"skipped_repositories"`
-	NotFoundRepositories   NotFoundRepositories   `json:"not_found_repositories"`
-	NoCodeQLDBRepositories NoCodeQLDBRepositories `json:"no_codeql_db_repositories"`
-	OverLimitRepositories  OverLimitRepositories  `json:"over_limit_repositories"`
+	SkippedRepositories SkippedRepositories `json:"skipped_repositories"`
 }
 
 // AnalysisRecord represents the Analysis proto model as a flat JSON-serializable struct
@@ -115,15 +115,15 @@ func (s *MRVASummaryResponse) ToAnalysisRecord(analysisID, controllerRepo string
 		FailureReason:        s.FailureReason,
 		ScannedReposCount:    int32(len(s.ScannedRepositories)),
 		SkippedReposCount:    int32(s.SkippedRepositories.AccessMismatchRepositories.RepositoryCount),
-		NotFoundReposCount:   int32(s.NotFoundRepositories.RepositoryCount),
-		NoCodeqlDBReposCount: int32(s.NoCodeQLDBRepositories.RepositoryCount),
-		OverLimitReposCount:  int32(s.OverLimitRepositories.RepositoryCount),
+		NotFoundReposCount:   int32(s.SkippedRepositories.NotFoundRepositories.RepositoryCount),
+		NoCodeqlDBReposCount: int32(s.SkippedRepositories.NoCodeQLDBRepositories.RepositoryCount),
+		OverLimitReposCount:  int32(s.SkippedRepositories.OverLimitRepositories.RepositoryCount),
 		ActionsWorkflowRunID: s.ActionsWorkflowRunID,
 		TotalReposCount: int32(len(s.ScannedRepositories)) +
 			int32(s.SkippedRepositories.AccessMismatchRepositories.RepositoryCount) +
-			int32(s.NotFoundRepositories.RepositoryCount) +
-			int32(s.NoCodeQLDBRepositories.RepositoryCount) +
-			int32(s.OverLimitRepositories.RepositoryCount),
+			int32(s.SkippedRepositories.NotFoundRepositories.RepositoryCount) +
+			int32(s.SkippedRepositories.NoCodeQLDBRepositories.RepositoryCount) +
+			int32(s.SkippedRepositories.OverLimitRepositories.RepositoryCount),
 	}
 }
 
@@ -143,9 +143,9 @@ type RepositoryRecord struct {
 func ToRepositoryRecords(summary MRVASummaryResponse, analysisID string) []RepositoryRecord {
 	totalCap := len(summary.ScannedRepositories) +
 		summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount +
-		summary.NotFoundRepositories.RepositoryCount +
-		summary.NoCodeQLDBRepositories.RepositoryCount +
-		summary.OverLimitRepositories.RepositoryCount
+		summary.SkippedRepositories.NotFoundRepositories.RepositoryCount +
+		summary.SkippedRepositories.NoCodeQLDBRepositories.RepositoryCount +
+		summary.SkippedRepositories.OverLimitRepositories.RepositoryCount
 
 	records := make([]RepositoryRecord, 0, totalCap)
 
@@ -176,7 +176,7 @@ func ToRepositoryRecords(summary MRVASummaryResponse, analysisID string) []Repos
 	}
 
 	// Not found repositories
-	for _, fullName := range summary.NotFoundRepositories.Repositories {
+	for _, fullName := range summary.SkippedRepositories.NotFoundRepositories.Repositories {
 		records = append(records, RepositoryRecord{
 			RowID:              int32(atomic.AddInt64(&repositoryRowIDCounter, 1)),
 			RepositoryFullName: fullName,
@@ -187,7 +187,7 @@ func ToRepositoryRecords(summary MRVASummaryResponse, analysisID string) []Repos
 	}
 
 	// No CodeQL DB repositories
-	for _, repo := range summary.NoCodeQLDBRepositories.Repositories {
+	for _, repo := range summary.SkippedRepositories.NoCodeQLDBRepositories.Repositories {
 		records = append(records, RepositoryRecord{
 			RowID:              int32(atomic.AddInt64(&repositoryRowIDCounter, 1)),
 			RepositoryFullName: repo.FullName,
@@ -198,7 +198,7 @@ func ToRepositoryRecords(summary MRVASummaryResponse, analysisID string) []Repos
 	}
 
 	// Over limit repositories
-	for _, repo := range summary.OverLimitRepositories.Repositories {
+	for _, repo := range summary.SkippedRepositories.OverLimitRepositories.Repositories {
 		records = append(records, RepositoryRecord{
 			RowID:              int32(atomic.AddInt64(&repositoryRowIDCounter, 1)),
 			RepositoryFullName: repo.FullName,

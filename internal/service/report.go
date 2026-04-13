@@ -19,9 +19,9 @@ func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryRe
 	}
 
 	totalSkipped := summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount
-	totalNotFound := summary.NotFoundRepositories.RepositoryCount
-	totalNoCodeQL := summary.NoCodeQLDBRepositories.RepositoryCount
-	totalOverLimit := summary.OverLimitRepositories.RepositoryCount
+	totalNotFound := summary.SkippedRepositories.NotFoundRepositories.RepositoryCount
+	totalNoCodeQL := summary.SkippedRepositories.NoCodeQLDBRepositories.RepositoryCount
+	totalOverLimit := summary.SkippedRepositories.OverLimitRepositories.RepositoryCount
 	totalRepos := len(results) + totalSkipped + totalNotFound + totalNoCodeQL + totalOverLimit
 
 	// Build the markdown content
@@ -143,7 +143,7 @@ func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryRe
 		md.WriteString(fmt.Sprintf("### Not Found (%d)\n\n", totalNotFound))
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repoName := range summary.NotFoundRepositories.Repositories {
+		for _, repoName := range summary.SkippedRepositories.NotFoundRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repoName))
 		}
 		md.WriteString("\n")
@@ -154,7 +154,7 @@ func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryRe
 		md.WriteString(fmt.Sprintf("### No CodeQL Database (%d)\n\n", totalNoCodeQL))
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repo := range summary.NoCodeQLDBRepositories.Repositories {
+		for _, repo := range summary.SkippedRepositories.NoCodeQLDBRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
 		}
 		md.WriteString("\n")
@@ -165,7 +165,7 @@ func (s *AnalysisService) generateMRVAStatusReport(summary *models.MRVASummaryRe
 		md.WriteString(fmt.Sprintf("### Over Limit (%d)\n\n", totalOverLimit))
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repo := range summary.OverLimitRepositories.Repositories {
+		for _, repo := range summary.SkippedRepositories.OverLimitRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
 		}
 		md.WriteString("\n")
@@ -232,9 +232,9 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 	// Pre-allocate based on estimated size
 	totalScanned := len(summary.ScannedRepositories)
 	totalSkipped := summary.SkippedRepositories.AccessMismatchRepositories.RepositoryCount
-	totalNotFound := summary.NotFoundRepositories.RepositoryCount
-	totalNoCodeQL := summary.NoCodeQLDBRepositories.RepositoryCount
-	totalOverLimit := summary.OverLimitRepositories.RepositoryCount
+	totalNotFound := summary.SkippedRepositories.NotFoundRepositories.RepositoryCount
+	totalNoCodeQL := summary.SkippedRepositories.NoCodeQLDBRepositories.RepositoryCount
+	totalOverLimit := summary.SkippedRepositories.OverLimitRepositories.RepositoryCount
 	totalRepos := totalScanned + totalSkipped + totalNotFound + totalNoCodeQL + totalOverLimit
 	// Estimate: ~400 bytes per repo + 3KB overhead
 	md.Grow(totalRepos*400 + 3072)
@@ -295,7 +295,7 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 		md.WriteString("## Not Found Repositories\n\n")
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repoName := range summary.NotFoundRepositories.Repositories {
+		for _, repoName := range summary.SkippedRepositories.NotFoundRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repoName))
 		}
 		md.WriteString("\n")
@@ -306,7 +306,7 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 		md.WriteString("## No CodeQL Database Repositories\n\n")
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repo := range summary.NoCodeQLDBRepositories.Repositories {
+		for _, repo := range summary.SkippedRepositories.NoCodeQLDBRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
 		}
 		md.WriteString("\n")
@@ -317,7 +317,7 @@ func (s *AnalysisService) generateMRVASummaryReport(summary *models.MRVASummaryR
 		md.WriteString("## Over Limit Repositories\n\n")
 		md.WriteString("| Repository |\n")
 		md.WriteString("|------------|\n")
-		for _, repo := range summary.OverLimitRepositories.Repositories {
+		for _, repo := range summary.SkippedRepositories.OverLimitRepositories.Repositories {
 			md.WriteString(fmt.Sprintf("| `%s` |\n", repo.FullName))
 		}
 		md.WriteString("\n")
