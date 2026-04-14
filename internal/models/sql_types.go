@@ -61,6 +61,5 @@ type Alert struct {
 	ResultFingerprint  *string `json:"result_fingerprint,omitempty"`
 	StepCount          *int32  `json:"step_count,omitempty"`
 	RepositoryRowId    int32   `json:"repository_row_id"`
-	AnalysisRowId      int32   `json:"analysis_row_id"`
 	RuleRowId          int32   `json:"rule_row_id"`
 }

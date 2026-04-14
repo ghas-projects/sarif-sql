@@ -117,7 +117,6 @@ CREATE TABLE IF NOT EXISTS alert (
 	result_fingerprint   TEXT,
 	step_count           INTEGER,
 	repository_row_id    INTEGER NOT NULL REFERENCES repository(row_id),
-	analysis_row_id      INTEGER NOT NULL REFERENCES analysis(row_id),
 	rule_row_id          INTEGER NOT NULL REFERENCES rule(row_id)
 );`
 	_, err := s.db.Exec(ddl)
@@ -202,8 +201,8 @@ func (s *SQLiteStore) WriteAlerts(tx *sql.Tx, alerts []*models.Alert) error {
 		row_id, file_path, start_line, start_column, end_line, end_column,
 		code_snippet_source, code_snippet_sink, code_snippet, code_snippet_context,
 		message, result_fingerprint, step_count,
-		repository_row_id, analysis_row_id, rule_row_id
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+		repository_row_id, rule_row_id
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
@@ -217,7 +216,7 @@ func (s *SQLiteStore) WriteAlerts(tx *sql.Tx, alerts []*models.Alert) error {
 			optStr(a.CodeSnippetSource), optStr(a.CodeSnippetSink),
 			optStr(a.CodeSnippet), optStr(a.CodeSnippetContext),
 			a.Message, optStr(a.ResultFingerprint), optInt32(a.StepCount),
-			a.RepositoryRowId, a.AnalysisRowId, a.RuleRowId,
+			a.RepositoryRowId, a.RuleRowId,
 		); err != nil {
 			return fmt.Errorf("alert %d: %w", a.RowId, err)
 		}

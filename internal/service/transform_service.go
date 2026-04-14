@@ -413,8 +413,7 @@ func (ts *TransformService) extractAlerts(run models.SarifRun, repositoryID int3
 
 		pbAlert := &models.Alert{
 			RowId:           alertID,
-			AnalysisRowId:   masterResult.Analysis.RowId, // FK to Analysis from analysis.json
-			RepositoryRowId: repositoryID,                // FK to Repository from repos.json
+			RepositoryRowId: repositoryID, // FK to Repository from repos.json
 			Message:         result.Message.Text,
 		}
 
