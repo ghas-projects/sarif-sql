@@ -103,7 +103,6 @@ var repositoryRowIDCounter int64
 func (s *MRVASummaryResponse) ToAnalysisRecord(analysisID, controllerRepo string) AnalysisRecord {
 	return AnalysisRecord{
 		RowID:                int32(atomic.AddInt64(&analysisRowIDCounter, 1)),
-		ToolName:             "CodeQL",
 		AnalysisID:           analysisID,
 		ControllerRepo:       controllerRepo,
 		Date:                 time.Now().Format("2006-01-02 15:04:05"),

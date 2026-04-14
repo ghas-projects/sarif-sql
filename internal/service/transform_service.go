@@ -120,6 +120,20 @@ func (ts *TransformService) Transform(ctx context.Context) (result *ResultCollec
 		return masterResult, nil
 	}
 
+	// Extract tool name and version from the first SARIF file
+	if toolName, toolVersion := ts.extractToolInfo(sarifFileNames[0]); toolName != "" || toolVersion != "" {
+		if toolName != "" {
+			masterResult.Analysis.ToolName = toolName
+		}
+		if toolVersion != "" {
+			masterResult.Analysis.ToolVersion = &toolVersion
+		}
+		ts.logger.Info("captured tool info from SARIF",
+			"tool_name", toolName,
+			"tool_version", toolVersion,
+			"sarif_file", sarifFileNames[0])
+	}
+
 	// Calculate optimal number of workers for concurrent processing
 	workers := util.CalculateOptimalWorkers(len(sarifFileNames))
 
@@ -248,6 +262,29 @@ func (ts *TransformService) processSarifFiles(ctx context.Context, workerId int,
 		}
 	}
 
+}
+
+// extractToolInfo reads a SARIF file and returns the tool driver's name and semantic version.
+// Returns empty strings if the values cannot be determined.
+func (ts *TransformService) extractToolInfo(sarifFileName string) (name, version string) {
+	sarifPath := filepath.Join(ts.sarifDirPath, sarifFileName)
+	data, err := os.ReadFile(sarifPath)
+	if err != nil {
+		ts.logger.Warn("failed to read SARIF file for tool info", "sarif_file", sarifFileName, "error", err)
+		return "", ""
+	}
+
+	var doc models.SarifDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		ts.logger.Warn("failed to parse SARIF file for tool info", "sarif_file", sarifFileName, "error", err)
+		return "", ""
+	}
+
+	if len(doc.Runs) > 0 {
+		driver := doc.Runs[0].Tool.Driver
+		return driver.Name, driver.SemanticVersion
+	}
+	return "", ""
 }
 
 // loadAnalysisFromJSON reads analysis.json and converts it to an Analysis
