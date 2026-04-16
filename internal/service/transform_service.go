@@ -558,7 +558,7 @@ func (ts *TransformService) extractCodeFlow(pbAlert *models.Alert, result models
 	stepCount := int32(len(locations))
 	pbAlert.StepCount = &stepCount
 
-	// Find source and sink code snippets
+	// Find source and sink code snippets via taxa roles
 	for _, tfLoc := range locations {
 		physLoc := tfLoc.Location.PhysicalLocation
 
@@ -582,6 +582,23 @@ func (ts *TransformService) extractCodeFlow(pbAlert *models.Alert, result models
 					pbAlert.CodeSnippetSink = &snippet
 				}
 			}
+		}
+	}
+
+	// Fall back to positional convention if taxa-based roles were not found:
+	// first location = source, last location = sink
+	if pbAlert.CodeSnippetSource == nil && len(locations) > 0 {
+		physLoc := locations[0].Location.PhysicalLocation
+		snippet := physLoc.ContextRegion.Snippet.Text
+		if snippet != "" {
+			pbAlert.CodeSnippetSource = &snippet
+		}
+	}
+	if pbAlert.CodeSnippetSink == nil && len(locations) > 0 {
+		physLoc := locations[len(locations)-1].Location.PhysicalLocation
+		snippet := physLoc.ContextRegion.Snippet.Text
+		if snippet != "" {
+			pbAlert.CodeSnippetSink = &snippet
 		}
 	}
 }

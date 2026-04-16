@@ -1,6 +1,6 @@
 # SARIF-SQL
 
-A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into Protocol Buffer (Protobuf) format for efficient data processing and analytics.
+A Go CLI tool for managing GitHub Code Scanning Multi-Repository Variant Analysis (MRVA) workflows and transforming SARIF (Static Analysis Results Interchange Format) files into a SQLite database for efficient data processing and analytics.
 
 ## Installation
 
@@ -14,110 +14,94 @@ A high-performance Go CLI tool for managing GitHub Code Scanning Multi-Repositor
 ```bash
 git clone https://github.com/ghas-projects/sarif-sql.git
 cd sarif-sql
-go build -o sarif-sql
+make build
 ```
 
-The binary will be created as `sarif-sql` in the current directory.
+The binary will be created at `dist/sarif-sql`.
 
 ## Usage
 
-### Transform SARIF to Protobuf
+All commands require the global flags `--analysis-id` and `--controller-repo`. The `analysis` subcommands also require authentication via `--token` or `--app-id`/`--private-key`.
 
-Convert SARIF files to Protobuf format for analytics and reporting:
+### 1. Start an Analysis
 
-```bash
-./sarif-sql transform \
-  --analysis-id 12345 \
-  --controller-repo org/repo \
-  --output ./proto-output
-```
-
-**Options:**
-- `--sarif-directory`: Directory containing SARIF files (required)
-- `--analysis-id`: Analysis ID for tracking (required)
-- `--controller-repo`: Controller repository in owner/name format (required)
-- `--output`: Output directory for Protobuf files (default: `./proto-output`)
-
-**Output Files:**
-- `run.pb` - Analysis run metadata
-- `repository.pb` - Repository information
-- `rule.pb` - Security rule definitions
-- `alert.pb` - Security findings/alerts
-
-### MRVA Analysis Management
-
-#### Start an Analysis
-
-Initialize directory structure for a new MRVA analysis:
+Initialize the local directory structure for a new MRVA analysis:
 
 ```bash
-./sarif-sql analysis start \
+./dist/sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
-  --repos-file repos.toml \
   --token $GITHUB_TOKEN
 ```
 
 Or with GitHub App authentication:
 
 ```bash
-./sarif-sql analysis start \
+./dist/sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/repo \
-  --repos "org/repo1,org/repo2,org/repo3" \
   --app-id 123456 \
   --private-key "$GITHUB_APP_PRIVATE_KEY"
 ```
 
-#### Download Analysis Artifacts
+Creates a directory at `analyses/{analysis-id}-{owner}-{repo}/`.
 
-Download SARIF artifacts from completed analyses:
+### 2. Download Analysis Artifacts
+
+Download SARIF artifacts from a completed analysis. The repository list is fetched automatically from the MRVA summary API:
 
 ```bash
-./sarif-sql analysis download \
-  --repos-file repos.toml \
+./dist/sarif-sql analysis download \
+  --analysis-id 12345 \
+  --controller-repo org/repo \
+  --directory ./analyses/12345-org-repo \
   --token $GITHUB_TOKEN
 ```
 
-Generates a status report at `reports/{analysis-id}-{repo}-status-report.md`
+**Options:**
+- `--directory`: Local directory to store downloaded SARIF files (required). Created in the first step.
 
-#### Get Analysis Summary
+Downloads are performed concurrently using an adaptive worker pool. Each artifact ZIP is extracted to a `.sarif` file automatically.
 
-Fetch and generate summary report for an MRVA analysis:
+Generates a status report at `reports/{analysis-id}-{owner}-{repo}-status-report.md`.
 
-```bash
-./sarif-sql analysis summary \ at `reports/summary/{analysis-id}-{repo}-summary-report.md`
+### 3. Transform SARIF to SQLite
 
-### Repository List Formats
-
-#### TOML Format (`repos.toml`)
-
-```toml
-[[repositories]]
-full_name = "owner/repo1"
-
-[[repositories]]
-full_name = "owner/repo2"
-
-[[repositories]]
-full_name = "owner/repo3"
-```
-
-#### JSON Format (`repos.json`)
-
-```json
-[
-  {"full_name": "owner/repo1"},
-  {"full_name": "owner/repo2"},
-  {"full_name": "owner/repo3"}
-]
-```
-
-#### Command Line
+Convert the downloaded SARIF files into a SQLite database for analytics and reporting:
 
 ```bash
---repos "owner/repo1,owner/repo2,owner/repo3"
+./dist/sarif-sql transform \
+  --analysis-id 12345 \
+  --controller-repo org/repo \
+  --sarif-directory ./analyses/12345-org-repo \
+  --output ./output
 ```
+
+**Options:**
+- `--sarif-directory`: Directory containing SARIF files (required)
+- `--analysis-id`: Analysis ID for tracking (required)
+- `--controller-repo`: Controller repository in owner/name format (required)
+- `--output`: Output directory for SQLite database (default: `./output`)
+
+**Output:**
+- `mrva-analysis.db` — SQLite database containing:
+  - `analysis` — Analysis run metadata
+  - `repository` — Repository information and scan status
+  - `rule` — CodeQL rule definitions
+  - `alert` — Security findings/alerts with code snippets, locations, and code-flow data
+
+### Analysis Summary (optional)
+
+Fetch and generate a summary report for an MRVA analysis at any point:
+
+```bash
+./dist/sarif-sql analysis summary \
+  --analysis-id 12345 \
+  --controller-repo org/repo \
+  --token $GITHUB_TOKEN
+```
+
+Generates a summary report at `reports/summary/{analysis-id}-{owner}-{repo}-summary-report.md`.
 
 ## Authentication
 
@@ -125,12 +109,16 @@ full_name = "owner/repo3"
 
 ```bash
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
-./sarif-sql analysis download --token $GITHUB_TOKEN ...
+./dist/sarif-sql analysis download \
+  --analysis-id 12345 \
+  --controller-repo org/repo \
+  --directory ./analyses/12345-org-repo \
+  --token $GITHUB_TOKEN
 ```
 
 **Required Scopes:**
-- `repo` - Full control of private repositories
-- `security_events` - Read and write security events
+- `repo` — Full control of private repositories
+- `security_events` — Read and write security events
 
 ### GitHub App
 
@@ -139,38 +127,43 @@ export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----
 ...
 -----END RSA PRIVATE KEY-----"
 
-./sarif-sql analysis download \
-  --private-key "$GITHUB_APP_PRIVATE_KEY" \
-  ...
+./dist/sarif-sql analysis download \
+  --analysis-id 12345 \
+  --controller-repo org/repo \
+  --directory ./analyses/12345-org-repo \
+  --app-id 123456 \
+  --private-key "$GITHUB_APP_PRIVATE_KEY"
 ```
 
 **Required Permissions:**
 - Code scanning alerts: Read and write
 - Contents: Read-only
 
-
-### Project Structure
+## Project Structure
 
 ```
 sarif-sql/
 ├── cmd/                    # CLI commands
-│   ├── analysis/          # MRVA analysis commands
-│   └── transform/         # SARIF transformation commands
+│   ├── sarif-protobuf.go  # Root command & global flags
+│   ├── analysis/          # MRVA analysis commands (start, download, summary)
+│   └── transform/         # SARIF → SQLite transformation command
 ├── internal/
-│   ├── auth/             # Authentication (PAT & GitHub App)
-│   ├── github/           # GitHub API client
-│   ├── models/           # Data models (SARIF, API)
-│   ├── parser/           # Repository file parsers
-│   └── service/          # Business logic
-│       ├── analysis_service.go       # MRVA operations
-│       ├── transform_service_proto.go # SARIF→Protobuf conversion
-│       └── report.go                 # Markdown report generation
-├── proto/
-│   └── sarifpb/          # Protobuf schema and generated Go code
-│       ├── sarif.proto
-│       └── sarif.pb.go
-├── util/                 # Utilities (logging, workers)
-└── main.go
+│   ├── auth/              # Authentication (PAT & GitHub App)
+│   ├── github/            # GitHub API client (MRVA status, summary, artifact download)
+│   ├── models/            # Data models (SARIF, API responses, SQL types)
+│   ├── parser/            # Repository file parsers (TOML, JSON)
+│   ├── service/           # Business logic
+│   │   ├── analysis_service.go  # MRVA lifecycle operations
+│   │   ├── transform_service.go # SARIF → SQLite conversion
+│   │   └── report.go            # Markdown report generation
+│   └── store/             # Data persistence
+│       └── sqlite.go      # SQLite schema, bulk writes, transactions
+├── util/                  # Utilities
+│   ├── logger.go          # Structured JSON logging
+│   └── workers.go         # Adaptive worker pool sizing
+├── main.go
+├── Makefile
+└── go.mod
 ```
 
 ## Logging
@@ -178,7 +171,7 @@ sarif-sql/
 All operations log to `logs/sarif-sql-YYYYMMDD-HHMMSS.json` in structured JSON format:
 
 ```json
-{"time":"2026-02-06T14:07:49Z","level":"INFO","msg":"transformation completed","total_alerts":3230,"total_repositories":10}
+{"time":"2026-02-06T14:07:49Z","level":"INFO","msg":"transformation completed successfully","db":"./output/mrva-analysis.db","total_repositories":10,"total_rules":42,"total_alerts":3230}
 ```
 
 ## Error Handling
@@ -193,73 +186,32 @@ All operations log to `logs/sarif-sql-YYYYMMDD-HHMMSS.json` in structured JSON f
 ### Complete MRVA Workflow
 
 ```bash
-# 1. Start analysis
-./sarif-sql analysis start \
+# 1. Start analysis — creates local directory structure
+./dist/sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/controller \
-  --repos-file repos.toml \
   --token $GITHUB_TOKEN
 
 # 2. Wait for analysis to complete (check GitHub UI or use summary command)
 
 # 3. Download SARIF artifacts
-./sarif-sql analysis download \
+./dist/sarif-sql analysis download \
   --analysis-id 12345 \
   --controller-repo org/controller \
   --directory ./analyses/12345-org-controller \
-  --repos-file repos.toml \
   --token $GITHUB_TOKEN
 
-# 4. Transform to Protobuf
-./sarif-sql transform \
+# 4. Transform to SQLite
+./dist/sarif-sql transform \
   --sarif-directory ./analyses/12345-org-controller \
   --analysis-id 12345 \
   --controller-repo org/controller \
-  --output ./proto-output
+  --output ./output
 
-# 5. Generate summary report
-./sarif-sql analysis summary \
-  --analysis-id 12345 \
-  --controller-repo org/controller \
-  --repos-file repos.toml \
-  --token $GITHUB_TOKEN
+# 5. Query results with any SQLite client
+sqlite3 ./output/mrva-analysis.db "SELECT COUNT(*) FROM alert"
 ```
-
-## Contributing
-
-### Development Setup
-
-```bash
-go get -u
-go build -v
-```
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Code Style
-
-- Follow standard Go conventions
-- Use `gofmt` for formatting
-- Add structured logging for important operations
-- Include context parameters for cancellable operations
 
 ## License
 
-See LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review logs in `logs/` directory for debugging
-
-## Acknowledgments
-
-- Built with [Cobra](https://github.com/spf13/cobra) for CLI framework
-- Uses [Protocol Buffers](https://protobuf.dev/) for efficient binary serialization
-- Designed for GitHub Advanced Security workflows
+Licensed under the [MIT license](LICENSE).
