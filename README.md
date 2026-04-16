@@ -212,6 +212,16 @@ All operations log to `logs/sarif-sql-YYYYMMDD-HHMMSS.json` in structured JSON f
 sqlite3 ./output/mrva-analysis.db "SELECT COUNT(*) FROM alert"
 ```
 
+## Pipeline
+
+`sarif-sql` is one component of the end-to-end MRVA reporting pipeline. The full flow is:
+
+1. **sarif-sql** (this repo) — Download SARIF artifacts and transform them into a normalized SQLite database.
+2. [**mrva-prep**](https://github.com/ghas-projects/mrva-prep) — Add query-optimized indexes, extract dashboard metrics, and compress the database.
+3. [**mrva-reports**](https://github.com/advanced-security/mrva-reports) — Render the database as an interactive single-page dashboard in the browser.
+
+A GitHub Actions workflow chains all three steps into a single automated run. See the [MRVA Documentation](https://github.com/advanced-security/mrva-documentation) for the full architecture and user guide.
+
 ## License
 
 Licensed under the [MIT license](LICENSE).
