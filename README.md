@@ -84,11 +84,11 @@ Convert the downloaded SARIF files into a SQLite database for analytics and repo
 - `--output`: Output directory for SQLite database (default: `./output`)
 
 **Output:**
-- `mrva-analysis.db` — SQLite database containing:
-  - `analysis` — Analysis run metadata
-  - `repository` — Repository information and scan status
-  - `rule` — CodeQL rule definitions
-  - `alert` — Security findings/alerts with code snippets, locations, and code-flow data
+- `mrva-analysis.db` - SQLite database containing:
+  - `analysis` - Analysis run metadata
+  - `repository` - Repository information and scan status
+  - `rule` - CodeQL rule definitions
+  - `alert` - Security findings/alerts with code snippets, locations, and code-flow data
 
 ### Analysis Summary (optional)
 
@@ -117,8 +117,8 @@ export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 ```
 
 **Required Scopes:**
-- `repo` — Full control of private repositories
-- `security_events` — Read and write security events
+- `repo` - Full control of private repositories
+- `security_events` - Read and write security events
 
 ### GitHub App
 
@@ -186,7 +186,7 @@ All operations log to `logs/sarif-sql-YYYYMMDD-HHMMSS.json` in structured JSON f
 ### Complete MRVA Workflow
 
 ```bash
-# 1. Start analysis — creates local directory structure
+# 1. Start analysis - creates local directory structure
 ./dist/sarif-sql analysis start \
   --analysis-id 12345 \
   --controller-repo org/controller \
